@@ -117,8 +117,8 @@ def combine_events(input_file: str, output_file: str):
 
 def main():
     """Main entry point for combine_events script."""
-    # Get project root (two levels up from this file)
-    project_root = Path(__file__).parent.parent.parent
+    # Get project root (four levels up from this file: src -> tax-report -> apps -> root)
+    project_root = Path(__file__).parent.parent.parent.parent
     input_file = project_root / "data" / "taxable_activities.json"
     output_file = project_root / "data" / "taxable_activities_combined.json"
     

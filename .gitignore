@@ -1,9 +1,10 @@
 venv/
 
-# Pants
-.pants.d/
-dist/
-.pants.workdir/
+# PDM
+.pdm-python
+.pdm.toml
+__pypackages__/
+.pdm-build/
 
 # Python
 __pycache__/
