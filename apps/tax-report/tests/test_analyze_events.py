@@ -25,7 +25,7 @@ def test_reconcile_same_price_with_partial_fills():
             "type": "partial_fill",
             "cum_qty": "8",
             "order_status": "partially_filled",
-            "symbol": "QQQ"
+            "symbol": "QQQ",
         },
         {
             "order_id": "test-order",
@@ -36,7 +36,7 @@ def test_reconcile_same_price_with_partial_fills():
             "type": "partial_fill",
             "cum_qty": "9",
             "order_status": "partially_filled",
-            "symbol": "QQQ"
+            "symbol": "QQQ",
         },
         {
             "order_id": "test-order",
@@ -47,7 +47,7 @@ def test_reconcile_same_price_with_partial_fills():
             "type": "partial_fill",
             "cum_qty": "11",
             "order_status": "partially_filled",
-            "symbol": "QQQ"
+            "symbol": "QQQ",
         },
         {
             "order_id": "test-order",
@@ -58,12 +58,12 @@ def test_reconcile_same_price_with_partial_fills():
             "type": "fill",
             "cum_qty": "20",  # This is the total!
             "order_status": "filled",
-            "symbol": "QQQ"
-        }
+            "symbol": "QQQ",
+        },
     ]
-    
+
     result = reconcile_events(events)
-    
+
     # Should use cum_qty (20) as the qty, not the individual qty (9)
     assert float(result["qty"]) == 20.0, f"Expected qty=20.0, got {result['qty']}"
     assert float(result["cum_qty"]) == 20.0, f"Expected cum_qty=20.0, got {result['cum_qty']}"
@@ -85,7 +85,7 @@ def test_reconcile_different_prices():
             "type": "partial_fill",
             "cum_qty": "10",
             "order_status": "partially_filled",
-            "symbol": "QQQ"
+            "symbol": "QQQ",
         },
         {
             "order_id": "test-order",
@@ -96,12 +96,12 @@ def test_reconcile_different_prices():
             "type": "fill",
             "cum_qty": "20",
             "order_status": "filled",
-            "symbol": "QQQ"
-        }
+            "symbol": "QQQ",
+        },
     ]
-    
+
     result = reconcile_events(events)
-    
+
     # Weighted average: (10*100 + 10*110) / 20 = 105.00
     assert float(result["qty"]) == 20.0
     assert float(result["cum_qty"]) == 20.0
@@ -122,36 +122,27 @@ def test_reconcile_single_event():
             "type": "fill",
             "cum_qty": "10",
             "order_status": "filled",
-            "symbol": "QQQ"
+            "symbol": "QQQ",
         }
     ]
-    
+
     result = reconcile_events(events)
-    
+
     assert result == events[0]
     print("✓ test_reconcile_single_event passed")
 
 
 def test_is_partial_fill():
     """Test partial fill detection."""
-    partial_fill_event = {
-        "type": "partial_fill",
-        "order_status": "filled"
-    }
+    partial_fill_event = {"type": "partial_fill", "order_status": "filled"}
     assert is_partial_fill(partial_fill_event) == True
-    
-    partial_fill_event2 = {
-        "type": "fill",
-        "order_status": "partially_filled"
-    }
+
+    partial_fill_event2 = {"type": "fill", "order_status": "partially_filled"}
     assert is_partial_fill(partial_fill_event2) == True
-    
-    fill_event = {
-        "type": "fill",
-        "order_status": "filled"
-    }
+
+    fill_event = {"type": "fill", "order_status": "filled"}
     assert is_partial_fill(fill_event) == False
-    
+
     print("✓ test_is_partial_fill passed")
 
 
@@ -167,7 +158,7 @@ def test_reconcile_no_fill_event():
             "type": "partial_fill",
             "cum_qty": "10",
             "order_status": "partially_filled",
-            "symbol": "QQQ"
+            "symbol": "QQQ",
         },
         {
             "order_id": "test-order",
@@ -178,12 +169,12 @@ def test_reconcile_no_fill_event():
             "type": "partial_fill",
             "cum_qty": "20",
             "order_status": "partially_filled",
-            "symbol": "QQQ"
-        }
+            "symbol": "QQQ",
+        },
     ]
-    
+
     result = reconcile_events(events)
-    
+
     # Should use last event's cum_qty
     assert float(result["qty"]) == 20.0
     assert float(result["cum_qty"]) == 20.0
@@ -200,4 +191,3 @@ if __name__ == "__main__":
     test_is_partial_fill()
     test_reconcile_no_fill_event()
     print("\n✅ All tests passed!")
-

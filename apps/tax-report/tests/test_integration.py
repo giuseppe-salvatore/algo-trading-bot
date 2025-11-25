@@ -32,7 +32,7 @@ def test_full_pipeline_with_partial_fills():
             "leaves_qty": "12",
             "order_id": "f886f6b0-0ef7-469f-8ab6-24cdabed3b48",
             "cum_qty": "8",
-            "order_status": "partially_filled"
+            "order_status": "partially_filled",
         },
         {
             "id": "2",
@@ -46,7 +46,7 @@ def test_full_pipeline_with_partial_fills():
             "leaves_qty": "11",
             "order_id": "f886f6b0-0ef7-469f-8ab6-24cdabed3b48",
             "cum_qty": "9",
-            "order_status": "partially_filled"
+            "order_status": "partially_filled",
         },
         {
             "id": "3",
@@ -60,7 +60,7 @@ def test_full_pipeline_with_partial_fills():
             "leaves_qty": "9",
             "order_id": "f886f6b0-0ef7-469f-8ab6-24cdabed3b48",
             "cum_qty": "11",
-            "order_status": "partially_filled"
+            "order_status": "partially_filled",
         },
         {
             "id": "4",
@@ -74,40 +74,42 @@ def test_full_pipeline_with_partial_fills():
             "leaves_qty": "0",
             "order_id": "f886f6b0-0ef7-469f-8ab6-24cdabed3b48",
             "cum_qty": "20",
-            "order_status": "filled"
-        }
+            "order_status": "filled",
+        },
     ]
-    
+
     # Step 1: Analyze events (should reconcile to 1 event with qty=20)
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(raw_events, f, indent=2)
         temp_input = f.name
-    
+
     try:
         analyzed_events = analyze_events(temp_input)
-        
+
         # Should have 1 event (reconciled)
         assert len(analyzed_events) == 1, f"Expected 1 analyzed event, got {len(analyzed_events)}"
-        
+
         # Should have qty=20 (from cum_qty)
         analyzed_event = analyzed_events[0]
-        assert float(analyzed_event["qty"]) == 20.0, f"Expected qty=20.0, got {analyzed_event['qty']}"
+        assert float(analyzed_event["qty"]) == 20.0, (
+            f"Expected qty=20.0, got {analyzed_event['qty']}"
+        )
         assert float(analyzed_event["cum_qty"]) == 20.0
-        
+
         # Step 2: Track balance (should show 20 shares)
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f2:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f2:
             json.dump(analyzed_events, f2, indent=2)
             temp_analyzed = f2.name
-        
+
         try:
             processed = track_balance("QQQ", temp_analyzed)
-            
+
             # Should have 1 event with 20 shares
             assert len(processed) == 1
             assert processed[0]["qty"] == 20.0
             assert processed[0]["position_after"] == 20.0
             assert processed[0]["status"] == "opened"
-            
+
             print("✓ test_full_pipeline_with_partial_fills passed")
         finally:
             Path(temp_analyzed).unlink()
@@ -129,7 +131,7 @@ def test_quantity_consistency_check():
             "side": "buy",
             "symbol": "QQQ",
             "cum_qty": "10",
-            "order_status": "filled"
+            "order_status": "filled",
         },
         {
             "id": "2",
@@ -141,39 +143,43 @@ def test_quantity_consistency_check():
             "side": "sell",
             "symbol": "QQQ",
             "cum_qty": "5",
-            "order_status": "filled"
-        }
+            "order_status": "filled",
+        },
     ]
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(raw_events, f, indent=2)
         temp_input = f.name
-    
+
     try:
         analyzed_events = analyze_events(temp_input)
-        
+
         # Calculate total quantities
         total_bought = sum(float(e["qty"]) for e in analyzed_events if e["side"] == "buy")
         total_sold = sum(float(e["qty"]) for e in analyzed_events if e["side"] == "sell")
-        
+
         assert total_bought == 10.0
         assert total_sold == 5.0
-        
+
         # Track balance
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f2:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f2:
             json.dump(analyzed_events, f2, indent=2)
             temp_analyzed = f2.name
-        
+
         try:
             processed = track_balance("QQQ", temp_analyzed)
-            
+
             # Verify quantities in processed events match
             processed_bought = sum(e["qty"] for e in processed if e["side"] == "buy")
             processed_sold = sum(e["qty"] for e in processed if e["side"] in ["sell", "sell_short"])
-            
-            assert processed_bought == total_bought, "Quantities should match between analyzed and processed"
-            assert processed_sold == total_sold, "Quantities should match between analyzed and processed"
-            
+
+            assert processed_bought == total_bought, (
+                "Quantities should match between analyzed and processed"
+            )
+            assert processed_sold == total_sold, (
+                "Quantities should match between analyzed and processed"
+            )
+
             print("✓ test_quantity_consistency_check passed")
         finally:
             Path(temp_analyzed).unlink()
@@ -186,4 +192,3 @@ if __name__ == "__main__":
     test_full_pipeline_with_partial_fills()
     test_quantity_consistency_check()
     print("\n✅ All integration tests passed!")
-
