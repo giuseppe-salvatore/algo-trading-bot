@@ -33,11 +33,7 @@ balance SYMBOL:
 # Run tests for all packages
 test:
     @echo "Running tests..."
-    @for test in apps/tax-report/tests/test_*.py; do \
-        echo "=== Running $$test ==="; \
-        python3 "$$test"; \
-        echo ""; \
-    done
+    @find apps/tax-report/tests -name "test_*.py" -exec sh -c 'echo "=== Running {} ==="; ./venv/bin/python "{}"; echo ""' \;
 
 # Show workspace info
 info:
