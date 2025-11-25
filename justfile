@@ -1,60 +1,55 @@
 # Alpaca Scripts - Justfile commands
-# Uses Pants for build and execution
+# Uses PDM for dependency and workspace management
+# PDM is installed in the virtual environment
 
 # Default recipe
 default:
     @just --list
 
-# Run combine_events script
-combine:
-    @echo "Running combine_events..."
-    ./pants run src/tax-report:combine_events
+prepare:
+    python3 -m venv venv && ./venv/bin/pip install pdm
+
+# Install dependencies for all workspace packages
+install:
+    @echo "Installing dependencies..."
+    ./venv/bin/pdm install
+
+# Sync dependencies (update lock file and install)
+sync:
+    @echo "Syncing dependencies..."
+    ./venv/bin/pdm sync
 
 # Run analyze_events script
 analyze:
     @echo "Running analyze_events..."
-    ./pants run src/tax-report:analyze_events
+    ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/analyze_events.py
 
 # Run balance_tracker script
-# Usage: just balance SYMBOL=AAPL
+# Usage: just balance AAPL
 balance SYMBOL:
     @echo "Running balance_tracker for symbol {{SYMBOL}}..."
-    ./pants run src/tax-report:balance_tracker -- {{SYMBOL}}
+    ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py {{SYMBOL}}
 
-# Lint code
-lint:
-    @echo "Linting code..."
-    ./pants lint ::
-
-# Format code
-format:
-    @echo "Formatting code..."
-    ./pants fmt ::
-
-# Type check code
-typecheck:
-    @echo "Type checking code..."
-    ./pants typecheck ::
-
-# Run tests (if any)
+# Run tests for all packages
 test:
     @echo "Running tests..."
-    ./pants test ::
+    @for test in apps/tax-report/tests/test_*.py; do \
+        echo "=== Running $$test ==="; \
+        python3 "$$test"; \
+        echo ""; \
+    done
 
-# Clean Pants cache
-clean:
-    @echo "Cleaning Pants cache..."
-    ./pants clean-all
+# Show workspace info
+info:
+    @echo "Workspace information:"
+    ./venv/bin/pdm info
 
 # Show help
 help:
     @echo "Available commands:"
-    @echo "  just combine              - Run combine_events script"
+    @echo "  just install              - Install all dependencies"
+    @echo "  just sync                 - Sync dependencies"
     @echo "  just analyze              - Run analyze_events script"
     @echo "  just balance SYMBOL=X     - Run balance_tracker for symbol X"
-    @echo "  just lint                 - Lint code"
-    @echo "  just format               - Format code"
-    @echo "  just typecheck            - Type check code"
     @echo "  just test                 - Run tests"
-    @echo "  just clean                - Clean Pants cache"
-
+    @echo "  just info                 - Show workspace information"

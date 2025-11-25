@@ -4,22 +4,20 @@ Python scripts to process and analyze trading events from Alpaca taxable activit
 
 ## Overview
 
-This project contains three scripts for processing Alpaca trading activity data:
+This project contains two scripts for processing Alpaca trading activity data:
 
-1. **combine_events.py**: Combines events that share the same `order_id`, intelligently handles partial fills and full fills, removing redundant partial fill events when prices match, and warning about discrepancies.
+1. **analyze_events.py**: Analyzes events by grouping them by `order_id`, identifying atomic events, and reconciling events with the same order_id. Correctly uses `cum_qty` for total quantities. This is the script used by `balance_tracker.py`.
 
-2. **analyze_events.py**: Analyzes events by grouping them by `order_id`, identifying atomic events, and reconciling events with the same order_id when prices differ. Returns a sorted list of processable events.
-
-3. **balance_tracker.py**: Tracks position balance for a specific symbol, showing buy/sell events, quantities, prices, cost basis, and position status (opened, updated, or closed) in a human-readable format.
+2. **balance_tracker.py**: Tracks position balance for a specific symbol, showing buy/sell events, quantities, prices, cost basis, and position status (opened, updated, or closed) in a human-readable format. Calculates profit/loss on every sale using the Average Cost Basis method.
 
 ## Features
 
-- **Event Combination**: Groups events by `order_id` and combines them intelligently
-- **Partial Fill Removal**: Automatically removes partial fill events when prices match, keeping only the final fill event
-- **Discrepancy Detection**: Warns when:
-  - Events with the same `order_id` have different prices
-  - Events with the same `order_id` have different transaction times (at second resolution)
-- **JSON Output**: Creates a new combined JSON file in the same format as the input
+- **Event Reconciliation**: Groups events by `order_id` and reconciles them intelligently
+- **Partial Fill Handling**: Correctly uses `cum_qty` to determine total quantities from partial fills
+- **Weighted Average Pricing**: When prices differ for the same order, calculates weighted average
+- **Position Tracking**: Maintains running position balance with average cost basis
+- **Profit/Loss Calculation**: Calculates profit/loss on every sale (partial or full) using Average Cost Basis method
+- **Discrepancy Detection**: Warns when events with the same `order_id` have different prices or transaction times
 
 ## Usage
 
@@ -46,11 +44,6 @@ Place your `taxable_activities.json` file in the `data/` directory (at the proje
 
 ### Running the Scripts
 
-**combine_events:**
-```bash
-just combine
-```
-
 **analyze_events:**
 ```bash
 just analyze
@@ -63,9 +56,7 @@ just balance SYMBOL=AAPL
 
 ### Output
 
-- **combine_events.py**: Creates `data/taxable_activities_combined.json` with the processed events. The output format matches the input format.
-
-- **analyze_events.py**: Creates `data/taxable_activities_analyzed.json` with a sorted list of processable events (by transaction_time, older first). Events with the same order_id are reconciled into a single event.
+- **analyze_events.py**: Creates `data/taxable_activities_analyzed.json` with a sorted list of processable events (by transaction_time, older first). Events with the same order_id are reconciled into a single event with correct total quantities using `cum_qty`.
 
 - **balance_tracker.py**: Creates `data/{SYMBOL}_balance_report.txt` with a human-readable report showing:
   - Event type (BUY/SELL)
@@ -74,25 +65,10 @@ just balance SYMBOL=AAPL
   - Cost basis for each transaction
   - Position status with icons (🟢 opened, 🔄 updated, 🔴 closed)
   - Running position balance and average cost
+  - Profit/loss for each sale
+  - Accumulated gains
 
 ## How It Works
-
-### combine_events.py
-
-1. **Load Events**: Reads all events from `data/taxable_activities.json`
-2. **Group by Order ID**: Groups events that share the same `order_id`
-3. **Process Groups**:
-   - For events with the same `order_id`:
-     - If prices are identical: Removes partial fill events, keeps only fill events
-     - If prices differ: Keeps all events and prints a warning
-     - If transaction times differ (at second resolution): Prints a warning
-4. **Generate Output**: Creates a new JSON file with the combined events
-
-**Example:**
-- Event 1: `order_id: "abc123"`, `type: "partial_fill"`, `price: "100.00"`
-- Event 2: `order_id: "abc123"`, `type: "fill"`, `price: "100.00"`
-
-The output will contain only Event 2 (the fill event), since prices match.
 
 ### analyze_events.py
 
@@ -101,10 +77,10 @@ The output will contain only Event 2 (the fill event), since prices match.
 3. **Process Events**:
    - **Atomic Events** (single order_id): Added directly to processable list
    - **Multi-Event Groups** (same order_id):
-     - **Same Price**: Discards partial fill events, keeps fill events
+     - **Same Price**: Discards partial fill events, keeps fill events with highest `cum_qty`
      - **Different Prices**: Reconciles events using weighted average price calculation:
        - Weighted average: `(price1 × qty1 + price2 × qty2) / total_qty`
-       - Uses final `cum_qty` as total quantity
+       - Uses final `cum_qty` as total quantity (from the event with latest timestamp)
        - Uses earliest `transaction_time` from the group
 4. **Sort and Output**: Sorts all processable events by `transaction_time` (older first) and creates a new JSON file
 
@@ -123,31 +99,40 @@ The output will contain a single reconciled event with:
 2. **Filter by Symbol**: Filters events for the specified symbol
 3. **Track Position Balance**:
    - Maintains running position quantity and cost basis
-   - Uses average cost basis method for position tracking
+   - Uses **Average Cost Basis** method for position tracking and profit calculation
    - For **BUY** events:
      - Adds to position
      - Updates average cost basis (weighted average)
      - Marks as 🟢 **opened** if position was 0, or 🔄 **updated** if position existed
    - For **SELL** events:
+     - Calculates profit/loss: `Sale Proceeds - (Quantity Sold × Average Cost)`
      - Reduces position proportionally
      - Adjusts cost basis based on sale quantity
      - Marks as 🔄 **updated** if partial sale, or 🔴 **closed** if position goes to 0
+     - Updates accumulated gains
 4. **Generate Report**: Creates a human-readable text file with transaction details
 
 **Example Output:**
 ```
-Date/Time            Side   Qty          Price        Cost Basis      Status    Position      Avg Cost    
-2024-01-15 10:30:00  BUY    10.0000      $150.00      $1,500.00       🟢 opened  10.0000       $150.00
-2024-01-20 14:15:00  BUY    5.0000       $155.00      $775.00         🔄 updated 15.0000       $151.67
-2024-01-25 11:00:00  SELL   8.0000       $160.00      $1,280.00       🔄 updated 7.0000        $151.67
-2024-01-30 09:45:00  SELL   7.0000       $165.00      $1,155.00       🔴 closed  0.0000       -
+Date/Time            Side   Qty          Price        Cost Basis      Status    Position      Avg Cost    Profit        Accumulated Gains
+2024-01-15 10:30:00  BUY    10.0000      $150.00      $1,500.00       🟢 opened  10.0000       $150.00     -              -
+2024-01-20 14:15:00  BUY    5.0000       $155.00      $775.00         🔄 updated 15.0000       $151.67     -              -
+2024-01-25 11:00:00  SELL   8.0000       $160.00      $1,280.00       🔄 updated 7.0000        $151.67     $66.64         $66.64
+2024-01-30 09:45:00  SELL   7.0000       $165.00      $1,155.00       🔴 closed  0.0000       -            $93.33         $159.97
 ```
+
+## Tax Accounting
+
+This system uses the **Average Cost Basis** method for calculating profit/loss. See [TAX_ACCOUNTING.md](TAX_ACCOUNTING.md) for detailed information about:
+- How profit/loss is calculated
+- Tax compliance notes
+- Comparison with other methods (FIFO, Specific Identification)
 
 ## Notes
 
 - The scripts use only Python standard library modules (`json`, `collections`, `datetime`, `typing`, `pathlib`)
-- Transaction time comparison is done at second resolution (microseconds are ignored)
+- Transaction time comparison uses proper datetime parsing for accurate sorting
 - Warnings are printed to stdout for manual review
 - The output file preserves the original JSON structure and formatting
 - Scripts automatically resolve paths relative to the project root, so they work regardless of where they're executed from
-
+- Profit/loss is calculated on every sale (partial or full), which is correct for tax reporting

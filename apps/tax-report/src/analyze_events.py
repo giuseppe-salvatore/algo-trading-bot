@@ -11,6 +11,7 @@ Script to analyze events in taxable_activities.json.
 
 import json
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -36,8 +37,15 @@ def reconcile_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if len(events) == 1:
         return events[0]
     
-    # Sort events by transaction_time to get earliest
-    sorted_events = sorted(events, key=lambda x: x.get("transaction_time", ""))
+    # Helper to parse ISO timestamp for proper sorting
+    def parse_timestamp(ts: str) -> datetime:
+        try:
+            return datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        except:
+            return datetime.min
+    
+    # Sort events by transaction_time (properly parsed) to get earliest and latest
+    sorted_events = sorted(events, key=lambda x: parse_timestamp(x.get("transaction_time", "")))
     earliest_event = sorted_events[0]
     
     # Get prices and quantities
@@ -49,10 +57,24 @@ def reconcile_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Same price - keep only fill events, discard partial fills
         fill_events = [e for e in sorted_events if not is_partial_fill(e)]
         if fill_events:
-            return fill_events[0]  # Return the first fill event
+            # Use the fill event with the highest cum_qty (should be the final fill)
+            # Sort fill events by cum_qty to get the one with the total
+            fill_events_by_cum_qty = sorted(fill_events, key=lambda x: float(x.get("cum_qty", 0)), reverse=True)
+            fill_event = fill_events_by_cum_qty[0].copy()
+            final_cum_qty = float(fill_event.get("cum_qty", fill_event.get("qty", 0)))
+            fill_event["qty"] = str(final_cum_qty)
+            fill_event["cum_qty"] = str(final_cum_qty)
+            return fill_event
         else:
-            # No fill events, return the last event (shouldn't happen normally)
-            return sorted_events[-1]
+            # No fill events, use the last event's cum_qty as total
+            last_event = sorted_events[-1].copy()
+            final_cum_qty = float(last_event.get("cum_qty", last_event.get("qty", 0)))
+            last_event["qty"] = str(final_cum_qty)
+            last_event["cum_qty"] = str(final_cum_qty)
+            last_event["type"] = "fill"
+            last_event["order_status"] = "filled"
+            last_event["leaves_qty"] = "0"
+            return last_event
     
     # Different prices - reconcile using weighted average
     # Get final cum_qty (should be from the last event)
@@ -128,8 +150,8 @@ def analyze_events(input_file: str) -> List[Dict[str, Any]]:
 
 def main():
     """Main entry point for analyze_events script."""
-    # Get project root (two levels up from this file)
-    project_root = Path(__file__).parent.parent.parent
+    # Get project root (four levels up from this file: src -> tax-report -> apps -> root)
+    project_root = Path(__file__).parent.parent.parent.parent
     input_file = project_root / "data" / "taxable_activities.json"
     output_file = project_root / "data" / "taxable_activities_analyzed.json"
     

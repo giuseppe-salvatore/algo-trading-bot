@@ -1,0 +1,14 @@
+[project]
+name = "tax-report"
+version = "0.1.0"
+description = "Scripts for processing and analyzing trading events from Alpaca taxable activities data"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+analyze-events = "analyze_events:main"
+balance-tracker = "balance_tracker:main"
+
+[tool.pdm]
+package-dir = "src"
+

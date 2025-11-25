@@ -1,0 +1,15 @@
+[project]
+name = "alpaca-scripts"
+version = "0.1.0"
+description = "A monorepo containing Python scripts and tools for processing and analyzing Alpaca trading data"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pdm]
+workspace = [
+    "apps/*",
+    "packages/*"
+]
+
+[tool.pdm.scripts]
+
