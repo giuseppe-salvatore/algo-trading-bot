@@ -1,0 +1,19 @@
+venv/
+
+# Pants
+.pants.d/
+dist/
+.pants.workdir/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Data files (contain confidential information)
+data/
