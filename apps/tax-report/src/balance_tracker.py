@@ -79,6 +79,9 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
         prev_avg_cost = avg_cost
         prev_cost_basis = cost_basis
         
+        # Initialize profit for this transaction (will be calculated during processing)
+        profit = None
+        
         # Normalize side (handle sell_short as sell)
         original_side = side
         if side in ["sell_short", "sell"]:
@@ -92,8 +95,13 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
                 short_qty = abs(position)
                 if qty <= short_qty:
                     # Covering part or all of the short
-                    # Cost to cover: we pay money to buy back shares
+                    # Calculate profit/loss on the shares being covered
+                    # Cost basis of short shares being covered (proportional)
+                    short_cost_basis_portion = (qty / short_qty) * abs(cost_basis) if cost_basis < 0 else 0
                     cover_cost = qty * price
+                    profit = short_cost_basis_portion - cover_cost
+                    
+                    # Cost to cover: we pay money to buy back shares
                     # For shorts, cost_basis is negative (proceeds received)
                     # When covering, we add the cost (making it less negative)
                     cost_basis += cover_cost
@@ -109,20 +117,86 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
                         avg_cost = abs(cost_basis / position) if position != 0 else 0
                         status = "updated"
                         status_icon = "🔄"
+                    
+                    # Update accumulated gains for partial/full cover
+                    accumulated_gains += profit
                 else:
                     # Covering short and creating long position
-                    # First cover the short
-                    cover_cost = short_qty * price
-                    cost_basis += cover_cost  # Cost to cover
-                    position = 0
-                    
-                    # Then create long position with excess
+                    # Split into two events: close short position, then open long position
                     excess_qty = qty - short_qty
+                    
+                    # First event: Close the short position
+                    # Proceeds received from short sale (stored as negative cost_basis)
+                    short_proceeds = abs(prev_cost_basis) if prev_cost_basis < 0 else 0
+                    # Cost to cover
+                    cover_cost = short_qty * price
+                    short_profit = short_proceeds - cover_cost
+                    
+                    # Update state for closing short
+                    cost_basis = 0
+                    position = 0
+                    avg_cost = 0
+                    status = "closed"
+                    status_icon = "🔴"
+                    
+                    # Update accumulated gains for closed short position
+                    accumulated_gains += short_profit
+                    
+                    # Create first event (closing short position)
+                    event_cost_basis_short = short_qty * price
+                    processed_events.append({
+                        "event": event,
+                        "side": "buy",  # Buying to cover
+                        "qty": short_qty,  # Only the short portion
+                        "price": price,
+                        "event_cost_basis": event_cost_basis_short,
+                        "position_after": position,
+                        "cost_basis_after": cost_basis,
+                        "avg_cost_after": avg_cost,
+                        "status": status,
+                        "status_icon": status_icon,
+                        "transaction_time": transaction_time,
+                        "prev_position": prev_position,
+                        "prev_avg_cost": prev_avg_cost,
+                        "prev_cost_basis": prev_cost_basis,
+                        "profit": short_profit,
+                        "accumulated_gains": accumulated_gains,
+                        "is_split_event": True,
+                        "split_part": "close_short"
+                    })
+                    
+                    # Second event: Open long position with excess
                     cost_basis = excess_qty * price  # New cost basis for long
                     position = excess_qty
                     avg_cost = price
                     status = "opened"
                     status_icon = "🟢"
+                    
+                    # Create second event (opening long position)
+                    event_cost_basis_long = excess_qty * price
+                    processed_events.append({
+                        "event": event,
+                        "side": "buy",
+                        "qty": excess_qty,  # Only the long portion
+                        "price": price,
+                        "event_cost_basis": event_cost_basis_long,
+                        "position_after": position,
+                        "cost_basis_after": cost_basis,
+                        "avg_cost_after": avg_cost,
+                        "status": status,
+                        "status_icon": status_icon,
+                        "transaction_time": transaction_time,
+                        "prev_position": 0,  # Previous position was 0 (after closing short)
+                        "prev_avg_cost": 0,
+                        "prev_cost_basis": 0,
+                        "profit": None,  # No profit on opening a position
+                        "accumulated_gains": accumulated_gains,
+                        "is_split_event": True,
+                        "split_part": "open_long"
+                    })
+                    
+                    # Skip the normal event creation for this case
+                    continue
             elif position == 0:
                 # Starting new long position
                 cost_basis = qty * price
@@ -145,19 +219,37 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
                 # We have a long position
                 if qty < position:
                     # Partial sale: reduce position, cost basis proportional
+                    # Calculate profit/loss on the shares being sold
                     sale_cost_basis = (qty / position) * cost_basis
+                    sale_proceeds = qty * price
+                    profit = sale_proceeds - sale_cost_basis
+                    
+                    # Update position and cost basis
                     cost_basis -= sale_cost_basis
                     position -= qty
                     avg_cost = cost_basis / position if position > 0 else 0
                     status = "updated"
                     status_icon = "🔄"
+                    
+                    # Update accumulated gains for partial sale
+                    accumulated_gains += profit
+                    
+                    # Update accumulated gains for partial sale
+                    accumulated_gains += profit
                 elif qty == position:
                     # Full sale: close position
+                    # Calculate profit/loss
+                    sale_proceeds = qty * price
+                    profit = sale_proceeds - cost_basis
+                    
                     cost_basis = 0
                     position = 0
                     avg_cost = 0
                     status = "closed"
                     status_icon = "🔴"
+                    
+                    # Update accumulated gains
+                    accumulated_gains += profit
                 else:
                     # Selling more than position (creates short)
                     # Split into two events: close long position, then open short position
@@ -246,6 +338,7 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
                 status_icon = "🟢"
             else:
                 # We have a short position - increasing the short
+                # No profit/loss when increasing a short position (just opening more)
                 # Add proceeds (making cost_basis more negative)
                 additional_proceeds = qty * price
                 cost_basis -= additional_proceeds
@@ -253,6 +346,7 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
                 avg_cost = abs(cost_basis / position) if position != 0 else 0
                 status = "updated"
                 status_icon = "🔄"
+                # No profit calculation - this is just increasing the short position
         else:
             # Unknown side - skip this event
             print(f"Warning: Unknown side '{side}' for event {event.get('id', 'unknown')}, skipping")
@@ -261,26 +355,21 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
         # Calculate event cost basis (for this transaction)
         event_cost_basis = qty * price
         
-        # Calculate profit when closing a position
-        profit = None
-        if status == "closed":
+        # Note: Profit is now calculated during transaction processing above
+        # for both partial and full sales. This section only handles edge cases
+        # where profit wasn't already calculated (shouldn't happen with current logic)
+        if profit is None and status == "closed":
+            # Fallback for edge cases (shouldn't normally execute)
             if prev_position > 0:
                 # Closing a long position
-                # Sale proceeds
                 sale_proceeds = qty * price
-                # Cost basis of the position being closed (the previous cost basis)
-                closed_cost_basis = prev_cost_basis
-                profit = sale_proceeds - closed_cost_basis
+                profit = sale_proceeds - prev_cost_basis
+                accumulated_gains += profit
             elif prev_position < 0:
                 # Closing a short position
-                # Proceeds received from short sale (stored as negative cost_basis)
                 short_proceeds = abs(prev_cost_basis) if prev_cost_basis < 0 else 0
-                # Cost to cover
                 cover_cost = qty * price
                 profit = short_proceeds - cover_cost
-            
-            # Update accumulated gains when position is closed
-            if profit is not None:
                 accumulated_gains += profit
         
         processed_events.append({
@@ -331,9 +420,9 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         
         # Table header
-        f.write("-" * 125 + "\n")
+        f.write("-" * 155 + "\n")
         f.write(f"{'Date/Time':<20} {'Side':<10} {'Qty':<12} {'Price':<12} {'Cost Basis':<15} {'Status':<10} {'Type':<6} {'Position':<12} {'Avg Cost':<12} {'Profit':<15} {'Accumulated Gains':<18}\n")
-        f.write("-" * 125 + "\n")
+        f.write("-" * 155 + "\n")
         
         # Process each event
         for pe in processed_events:
@@ -357,11 +446,14 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
             # For long positions, avg_cost represents cost per share
             avg_cost_str = format_currency(avg_cost) if avg_cost != 0 else "-"
             
-            # Determine position type
-            if position > 0:
-                position_type = "LONG"
-            elif position < 0:
-                position_type = "SHORT"
+            # Determine position type (only show when position is opened)
+            if status == "opened":
+                if position > 0:
+                    position_type = "LONG"
+                elif position < 0:
+                    position_type = "SHORT"
+                else:
+                    position_type = "-"
             else:
                 position_type = "-"
             
@@ -372,9 +464,12 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
             else:
                 profit_str = "-"
             
-            # Format accumulated gains
+            # Format accumulated gains (only show when it was updated, i.e., when profit is calculated)
             accumulated_gains = pe.get("accumulated_gains", 0.0)
-            accumulated_gains_str = format_currency(accumulated_gains)
+            if profit is not None:
+                accumulated_gains_str = format_currency(accumulated_gains)
+            else:
+                accumulated_gains_str = "-"
             
             # Write row
             f.write(f"{date_time:<20} {side:<10} {qty_str:<12} {price_str:<12} {cost_basis_str:<15} "

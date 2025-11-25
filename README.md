@@ -56,7 +56,6 @@ The easiest way to run scripts is using the provided `justfile`:
 
 ```bash
 # Tax reporting commands
-just combine              # Run combine_events script
 just analyze              # Run analyze_events script
 just balance SYMBOL=AAPL  # Run balance_tracker for a symbol
 
@@ -73,7 +72,6 @@ You can also run scripts directly with PDM:
 
 ```bash
 # Run tax-report scripts
-pdm run combine-events
 pdm run analyze-events
 pdm run balance-tracker AAPL
 ```
@@ -85,7 +83,6 @@ alpaca-scripts/
 ├── apps/
 │   └── tax-report/          # Tax reporting application
 │       ├── src/
-│       │   ├── combine_events.py
 │       │   ├── analyze_events.py
 │       │   └── balance_tracker.py
 │       ├── tests/            # Test files
@@ -111,7 +108,6 @@ alpaca-scripts/
 Scripts for processing and analyzing trading events from Alpaca taxable activities data. Includes tools for combining events, analyzing order patterns, and tracking position balances.
 
 **Commands:**
-- `just combine` - Combine events with the same order_id
 - `just analyze` - Analyze and reconcile events
 - `just balance SYMBOL=X` - Track position balance for a symbol
 

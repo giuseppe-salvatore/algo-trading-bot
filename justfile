@@ -6,6 +6,9 @@
 default:
     @just --list
 
+prepare:
+    python3 -m venv venv && ./venv/bin/pip install pdm
+
 # Install dependencies for all workspace packages
 install:
     @echo "Installing dependencies..."
@@ -15,11 +18,6 @@ install:
 sync:
     @echo "Syncing dependencies..."
     ./venv/bin/pdm sync
-
-# Run combine_events script
-combine:
-    @echo "Running combine_events..."
-    ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/combine_events.py
 
 # Run analyze_events script
 analyze:
@@ -35,7 +33,11 @@ balance SYMBOL:
 # Run tests for all packages
 test:
     @echo "Running tests..."
-    @./venv/bin/pdm run pytest apps/*/tests packages/*/tests || echo "No tests found or pytest not installed"
+    @for test in apps/tax-report/tests/test_*.py; do \
+        echo "=== Running $$test ==="; \
+        python3 "$$test"; \
+        echo ""; \
+    done
 
 # Show workspace info
 info:
@@ -47,7 +49,6 @@ help:
     @echo "Available commands:"
     @echo "  just install              - Install all dependencies"
     @echo "  just sync                 - Sync dependencies"
-    @echo "  just combine              - Run combine_events script"
     @echo "  just analyze              - Run analyze_events script"
     @echo "  just balance SYMBOL=X     - Run balance_tracker for symbol X"
     @echo "  just test                 - Run tests"

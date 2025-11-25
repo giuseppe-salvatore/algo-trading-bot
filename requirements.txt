@@ -1,9 +1,10 @@
 # No external dependencies required
-# The combine_events.py script uses only Python standard library modules:
+# The scripts use only Python standard library modules:
 # - json
 # - collections
 # - datetime
 # - typing
+# - pathlib
 
 
 
