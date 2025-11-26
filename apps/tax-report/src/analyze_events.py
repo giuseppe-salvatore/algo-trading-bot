@@ -69,9 +69,12 @@ def reconcile_events(events: list[dict[str, Any]]) -> dict[str, Any]:
             fill_event["cum_qty"] = str(final_cum_qty)
             return fill_event
         else:
-            # No fill events, use the last event's cum_qty as total
+            # No fill events, only partial fills
+            # Use sum of qty values instead of last event's cum_qty
+            # because cum_qty can be incorrect in partial fill data
+            total_qty = sum(float(e.get("qty", 0)) for e in sorted_events)
             last_event = sorted_events[-1].copy()
-            final_cum_qty = float(last_event.get("cum_qty", last_event.get("qty", 0)))
+            final_cum_qty = total_qty  # Use sum of qty values, not last event's cum_qty
             last_event["qty"] = str(final_cum_qty)
             last_event["cum_qty"] = str(final_cum_qty)
             last_event["type"] = "fill"
