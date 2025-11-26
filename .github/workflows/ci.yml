@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**' ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install PDM
+      run: |
+        python3 -m venv venv
+        ./venv/bin/pip install pdm
+
+    - name: Install dependencies
+      run: |
+        ./venv/bin/pdm install
+        ./venv/bin/pip install ruff
+
+    - name: Check code formatting
+      run: |
+        ./venv/bin/ruff format --check apps/ packages/
+      continue-on-error: false
+
+    - name: Check code linting
+      run: |
+        ./venv/bin/ruff check apps/ packages/
+      continue-on-error: false
+
+    - name: Run tests
+      run: |
+        find apps/tax-report/tests -name "test_*.py" -exec sh -c 'echo "=== Running {} ==="; ./venv/bin/python "{}"; echo ""' \;
+      continue-on-error: false
+
+    - name: Run test-analyze script
+      run: |
+        ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/analyze_events.py \
+          --input data/trading/alpaca/test/taxable_activities.json \
+          --output data/trading/alpaca/test/taxable_activities_analyzed.json
+
+    - name: Verify test-analyze output exists
+      run: |
+        if [ ! -f "data/trading/alpaca/test/taxable_activities_analyzed.json" ]; then
+          echo "❌ Expected output file not found: data/trading/alpaca/test/taxable_activities_analyzed.json"
+          exit 1
+        fi
+        echo "✅ test-analyze output file exists"
+
+    - name: Run test-balance script
+      run: |
+        mkdir -p data/trading/alpaca/test/reports
+        ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py TEST_POS_OPEN \
+          --input data/trading/alpaca/test/taxable_activities_analyzed.json \
+          --splits data/trading/alpaca/test/splits.json \
+          --output data/trading/alpaca/test/reports/TEST_POS_OPEN_balance_report.txt
+
+    - name: Verify test-balance output exists
+      run: |
+        if [ ! -f "data/trading/alpaca/test/reports/TEST_POS_OPEN_balance_report.txt" ]; then
+          echo "❌ Expected output file not found: data/trading/alpaca/test/reports/TEST_POS_OPEN_balance_report.txt"
+          exit 1
+        fi
+        echo "✅ test-balance output file exists"
+
