@@ -4,11 +4,13 @@ Python scripts to process and analyze trading events from Alpaca taxable activit
 
 ## Overview
 
-This project contains two scripts for processing Alpaca trading activity data:
+This project contains three scripts for processing Alpaca trading activity data:
 
-1. **analyze_events.py**: Analyzes events by grouping them by `order_id`, identifying atomic events, and reconciling events with the same order_id. Correctly uses `cum_qty` for total quantities. This is the script used by `balance_tracker.py`.
+1. **analyze_events.py**: Analyzes events by grouping them by `order_id`, identifying atomic events, and reconciling events with the same order_id. Correctly uses `cum_qty` for total quantities. This is the script used by `balance_tracker.py` and `fiscal_year_report.py`.
 
 2. **balance_tracker.py**: Tracks position balance for a specific symbol, showing buy/sell events, quantities, prices, cost basis, and position status (opened, updated, or closed) in a human-readable format. Calculates profit/loss on every sale using the Average Cost Basis method.
+
+3. **fiscal_year_report.py**: Generates comprehensive UK Financial Year or all-time capital gains reports across all symbols. Processes all events from day 0 to maintain accurate cost basis, but only counts profits from events within the specified FY period (or all events for all-time analysis). Generates reports in text, JSON, and CSV formats.
 
 ## Features
 
@@ -20,6 +22,9 @@ This project contains two scripts for processing Alpaca trading activity data:
 - **Discrepancy Detection**: Warns when events with the same `order_id` have different prices or transaction times
 - **Stock Splits**: Automatically applies stock splits based on splits.json file
 - **Symbol Name Changes**: Automatically consolidates events from symbols that have changed names (e.g., MF → MFLTF → MFLTY)
+- **UK Financial Year Reporting**: Generates tax reports for specific UK FY periods (April 6 to April 5)
+- **All-Time Analysis**: Option to generate comprehensive profit/loss reports across entire trading history
+- **Multi-Format Reports**: Generates reports in text, JSON, and CSV formats
 
 ## Usage
 
@@ -72,6 +77,24 @@ Or with custom input/splits/name-changes/output files:
     --output path/to/report.txt
 ```
 
+**fiscal_year_report:**
+```bash
+# For a specific UK Financial Year (e.g., 2025-26 = April 6, 2025 to April 5, 2026)
+just fiscal-report 2025-26
+
+# For all-time analysis (all events from day 0)
+just fiscal-report-all-time
+```
+
+Or with custom input/splits/name-changes/output files:
+```bash
+./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/fiscal_year_report.py 2025-26 \
+    --input path/to/analyzed.json \
+    --splits path/to/splits.json \
+    --name-changes path/to/name_changes.json \
+    --output-dir path/to/output/
+```
+
 ### Command-Line Options
 
 **analyze_events.py:**
@@ -84,6 +107,13 @@ Or with custom input/splits/name-changes/output files:
 - `--splits` / `-s`: Override splits file path (default: `data/trading/alpaca/live/splits.json`)
 - `--name-changes` / `-n`: Override name_changes.json file path (default: `data/trading/alpaca/live/name_changes.json`)
 - `--output` / `-o`: Override output report file (default: `data/trading/alpaca/live/reports/{LATEST_SYMBOL}_balance_report.txt`)
+
+**fiscal_year_report.py:**
+- `FY` (optional): UK Financial Year in format "YYYY-YY" (e.g., "2025-26"). If omitted, performs all-time analysis.
+- `--input` / `-i`: Override input analyzed events file (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
+- `--splits` / `-s`: Override splits file path (default: `data/trading/alpaca/live/splits.json`)
+- `--name-changes` / `-n`: Override name_changes.json file path (default: `data/trading/alpaca/live/name_changes.json`)
+- `--output-dir` / `-o`: Override output directory (default: `data/tax-return/reports/`)
 
 ### Output
 
@@ -98,6 +128,14 @@ Or with custom input/splits/name-changes/output files:
   - Running position balance and average cost
   - Profit/loss for each sale
   - Accumulated gains
+
+- **fiscal_year_report.py**: Creates three report files in `data/tax-return/reports/`:
+  - **Text report** (`FY_YYYY-YY_capital_gains_report.txt` or `all_time_capital_gains_report.txt`):
+    - Summary with total profit/loss
+    - Gains by symbol, sorted by profit (highest first)
+    - Separate sections for gains and losses
+  - **JSON report** (`.json`): Structured data with FY period, totals, and per-symbol breakdown
+  - **CSV report** (`.csv`): Simple format with symbol and profit/loss columns
 
 ## How It Works
 
@@ -152,6 +190,56 @@ Date/Time            Side   Qty          Price        Cost Basis      Status    
 2024-01-30 09:45:00  SELL   7.0000       $165.00      $1,155.00       🔴 closed  0.0000       -            $93.33         $159.97
 ```
 
+### fiscal_year_report.py
+
+1. **Load and Analyze Events**: Reads all events from `data/trading/alpaca/live/taxable_activities_analyzed.json` (default) and processes them using `analyze_events()` function
+2. **Process ALL Events Chronologically**: 
+   - Processes ALL events from day 0 (not filtered by date) to maintain accurate position state and cost basis
+   - This is critical: positions opened before the FY period need full history to calculate correct profit when selling during the FY
+3. **Normalize Symbols**: Resolves all symbols to their latest names using name changes mapping
+4. **Track Positions Per Symbol**: For each symbol:
+   - Maintains position state (quantity, cost basis, average cost) across all events
+   - Applies stock splits chronologically as they occur
+   - Processes all buy/sell events to maintain accurate cost basis
+5. **Filter Taxable Events**: Only counts profits from taxable events:
+   - **Long positions**: SELL transactions (partial or full)
+   - **Short positions**: BUY transactions when covering shorts (partial or full)
+   - Events must occur within the specified FY period (or all events for all-time analysis)
+6. **Generate Reports**: Creates text, JSON, and CSV reports with:
+   - Total profit/loss for the period
+   - Breakdown by symbol, sorted by profit (highest first)
+   - Separate sections for gains and losses
+
+**Example Output (Text Report):**
+```
+================================================================================
+UK Financial Year Capital Gains Report
+Financial Year: 2025-26 (April 06, 2025 to April 05, 2026)
+================================================================================
+
+Summary:
+--------------------------------------------------------------------------------
+Total Profit/Loss: $3,665.08
+Number of Symbols with Gains: 14
+Number of Symbols with Losses: 2
+
+Gains by Symbol (sorted by profit, highest first):
+--------------------------------------------------------------------------------
+Symbol                   Profit/Loss
+--------------------------------------------------------------------------------
+INTC                       $1,537.44
+TSLA                         $562.72
+AMD                          $527.39
+...
+```
+
+**Key Points:**
+- Processes ALL events from day 0 to maintain accurate cost basis calculations
+- Only counts profits for events within the specified FY period (when FY is provided)
+- For all-time analysis, counts all taxable profits across entire trading history
+- Uses the same Average Cost Basis method as `balance_tracker.py` for consistency
+- Handles stock splits, symbol name changes, and complex position transitions
+
 ## Test Data
 
 The project includes comprehensive test data covering various edge cases and scenarios. See [data/trading/alpaca/test/README.md](../../data/trading/alpaca/test/README.md) for:
@@ -172,6 +260,7 @@ This system uses the **Average Cost Basis** method for calculating profit/loss. 
 
 - **Live Data**: Confidential trading data is stored in `data/trading/alpaca/live/` and is git-ignored
 - **Test Data**: Test data for development and testing is stored in `data/trading/alpaca/test/` and is version-controlled
+- **Tax Reports**: Financial year and all-time capital gains reports are stored in `data/tax-return/reports/` and are git-ignored
 - Scripts default to using live data locations but can be overridden with command-line arguments
 
 ## Notes

@@ -48,6 +48,27 @@ test-balance SYMBOL:
         --splits data/trading/alpaca/test/splits.json \
         --output data/trading/alpaca/test/reports/{{SYMBOL}}_balance_report.txt
 
+# Run fiscal_year_report script
+# Usage: just fiscal-report 2025-26
+fiscal-report FY:
+    @echo "Running fiscal_year_report for FY {{FY}}..."
+    ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/fiscal_year_report.py {{FY}}
+
+# Run fiscal_year_report with test data
+# Usage: just test-fiscal-report 2025-26
+test-fiscal-report FY:
+    @echo "Running fiscal_year_report for test FY {{FY}}..."
+    ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/fiscal_year_report.py {{FY}} \
+        --input data/trading/alpaca/test/taxable_activities_analyzed.json \
+        --splits data/trading/alpaca/test/splits.json \
+        --name-changes data/trading/alpaca/test/name_changes.json
+
+# Run fiscal_year_report for all-time analysis (no FY specified)
+# Usage: just fiscal-report-all-time
+fiscal-report-all-time:
+    @echo "Running fiscal_year_report for all-time analysis..."
+    ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/fiscal_year_report.py
+
 # Run tests for all packages
 test:
     @echo "Running tests..."
@@ -78,6 +99,9 @@ help:
     @echo "  just test-analyze         - Run analyze_events on test data"
     @echo "  just balance SYMBOL=X     - Run balance_tracker for symbol X"
     @echo "  just test-balance SYMBOL=X - Run balance_tracker for test symbol X"
+    @echo "  just fiscal-report FY=X   - Run fiscal_year_report for FY X (e.g., 2025-26)"
+    @echo "  just test-fiscal-report FY=X - Run fiscal_year_report for test FY X"
+    @echo "  just fiscal-report-all-time - Run fiscal_year_report for all-time analysis"
     @echo "  just test                 - Run tests"
     @echo "  just lint                 - Lint all Python files"
     @echo "  just format               - Format all Python files"
