@@ -17,4 +17,6 @@ dist/
 build/
 
 # Data files (contain confidential information)
-data/
+# Ignore live trading data (confidential)
+data/trading/alpaca/live/
+# Keep test data tracked in git

@@ -1,0 +1,53 @@
+[
+    {
+        "id": "20240202110000000::test-fw-split-remove",
+        "activity_type": "SPLIT",
+        "date": "2024-02-02",
+        "created_at": "2024-02-02T11:00:00Z",
+        "net_amount": "0",
+        "description": "REMOVE, From QTY:10, To QTY:30, Position Value:1000.00",
+        "symbol": "TEST_FW_SPLIT",
+        "qty": "-10",
+        "price": "100.00",
+        "status": "executed"
+    },
+    {
+        "id": "20240202110000001::test-fw-split-add",
+        "activity_type": "SPLIT",
+        "date": "2024-02-02",
+        "created_at": "2024-02-02T11:00:01Z",
+        "net_amount": "0",
+        "description": "ADD, From QTY:10, To QTY:30, Position Value:1000.00",
+        "symbol": "TEST_FW_SPLIT",
+        "qty": "30",
+        "price": "33.33",
+        "status": "executed"
+    },
+    {
+        "id": "20240302110000000::test-bw-split-remove",
+        "activity_type": "SPLIT",
+        "activity_sub_type": "RSPLIT",
+        "date": "2024-03-02",
+        "created_at": "2024-03-02T11:00:00Z",
+        "net_amount": "0",
+        "description": "REMOVE, From QTY:30, To QTY:10, Position Value:3000.00",
+        "symbol": "TEST_BW_SPLIT",
+        "qty": "-30",
+        "price": "100.00",
+        "status": "executed"
+    },
+    {
+        "id": "20240302110000001::test-bw-split-add",
+        "activity_type": "SPLIT",
+        "activity_sub_type": "RSPLIT",
+        "date": "2024-03-02",
+        "created_at": "2024-03-02T11:00:01Z",
+        "net_amount": "0",
+        "description": "ADD, From QTY:30, To QTY:10, Position Value:3000.00",
+        "symbol": "TEST_BW_SPLIT",
+        "qty": "10",
+        "price": "300.00",
+        "status": "executed"
+    }
+]
+

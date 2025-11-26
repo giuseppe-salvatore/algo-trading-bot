@@ -183,6 +183,82 @@ def test_reconcile_no_fill_event():
     print("✓ test_reconcile_no_fill_event passed")
 
 
+def test_partial_fill_realistic():
+    """Test partial fill scenario using realistic test data format."""
+    # This simulates the TEST_PARTIAL_FILL scenario
+    events = [
+        {
+            "id": "test-partial-fill-1",
+            "activity_type": "FILL",
+            "transaction_time": "2024-05-01T10:00:00Z",
+            "type": "partial_fill",
+            "price": "50.00",
+            "qty": "5",
+            "side": "buy",
+            "symbol": "TEST_PARTIAL_FILL",
+            "leaves_qty": "15",
+            "order_id": "order-partial-1",
+            "cum_qty": "5",
+            "order_status": "partially_filled"
+        },
+        {
+            "id": "test-partial-fill-2",
+            "activity_type": "FILL",
+            "transaction_time": "2024-05-01T10:00:01Z",
+            "type": "partial_fill",
+            "price": "51.00",
+            "qty": "5",
+            "side": "buy",
+            "symbol": "TEST_PARTIAL_FILL",
+            "leaves_qty": "10",
+            "order_id": "order-partial-1",
+            "cum_qty": "10",
+            "order_status": "partially_filled"
+        },
+        {
+            "id": "test-partial-fill-3",
+            "activity_type": "FILL",
+            "transaction_time": "2024-05-01T10:00:02Z",
+            "type": "fill",
+            "price": "52.00",
+            "qty": "10",
+            "side": "buy",
+            "symbol": "TEST_PARTIAL_FILL",
+            "leaves_qty": "0",
+            "order_id": "order-partial-1",
+            "cum_qty": "20",
+            "order_status": "filled"
+        }
+    ]
+
+    from analyze_events import analyze_events
+    import tempfile
+    import json
+    from pathlib import Path
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(events, f, indent=2)
+        temp_input = f.name
+
+    try:
+        analyzed = analyze_events(temp_input)
+
+        # Should have 1 event (reconciled)
+        assert len(analyzed) == 1
+
+        # Should have qty=20 (from cum_qty)
+        analyzed_event = analyzed[0]
+        assert float(analyzed_event["qty"]) == 20.0
+        assert float(analyzed_event["cum_qty"]) == 20.0
+
+        # Weighted average price: (5*50 + 5*51 + 10*52) / 20 = 51.25
+        assert abs(float(analyzed_event["price"]) - 51.25) < 0.01
+
+        print("✓ test_partial_fill_realistic passed")
+    finally:
+        Path(temp_input).unlink()
+
+
 if __name__ == "__main__":
     print("Running tests for analyze_events.py...\n")
     test_reconcile_same_price_with_partial_fills()
@@ -190,4 +266,5 @@ if __name__ == "__main__":
     test_reconcile_single_event()
     test_is_partial_fill()
     test_reconcile_no_fill_event()
+    test_partial_fill_realistic()
     print("\n✅ All tests passed!")

@@ -9,6 +9,7 @@ Script to analyze events in taxable_activities.json.
 - Returns sorted list of processable events (by transaction_time, older first)
 """
 
+import argparse
 import json
 from collections import defaultdict
 from datetime import datetime
@@ -40,7 +41,7 @@ def reconcile_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     def parse_timestamp(ts: str) -> datetime:
         try:
             return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        except:
+        except (ValueError, AttributeError):
             return datetime.min
 
     # Sort events by transaction_time (properly parsed) to get earliest and latest
@@ -161,10 +162,37 @@ def analyze_events(input_file: str) -> List[Dict[str, Any]]:
 
 def main():
     """Main entry point for analyze_events script."""
+    parser = argparse.ArgumentParser(
+        description="Analyze trading events from taxable_activities.json"
+    )
+    parser.add_argument(
+        "--input",
+        "-i",
+        type=str,
+        help="Path to input taxable_activities.json file (overrides default)",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        help="Path to output analyzed events JSON file (overrides default)",
+    )
+
+    args = parser.parse_args()
+
     # Get project root (four levels up from this file: src -> tax-report -> apps -> root)
     project_root = Path(__file__).parent.parent.parent.parent
-    input_file = project_root / "data" / "taxable_activities.json"
-    output_file = project_root / "data" / "taxable_activities_analyzed.json"
+
+    # Set default paths or use overrides
+    if args.input:
+        input_file = Path(args.input)
+    else:
+        input_file = project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities.json"
+
+    if args.output:
+        output_file = Path(args.output)
+    else:
+        output_file = project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities_analyzed.json"
 
     processable_events = analyze_events(str(input_file))
 

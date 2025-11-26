@@ -9,6 +9,7 @@ Takes a symbol as input and generates a human-readable report showing:
 - Position status (opened, updated, or closed)
 """
 
+import argparse
 import json
 import sys
 from datetime import datetime
@@ -347,7 +348,6 @@ def track_balance(
         profit = None
 
         # Normalize side (handle sell_short as sell)
-        original_side = side
         if side in ["sell_short", "sell"]:
             side = "sell"
 
@@ -792,7 +792,6 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
                 f.write("\n")
                 continue
 
-            event = pe["event"]
             side = pe["side"].upper()
             qty = pe["qty"]
             price = pe["price"]
@@ -872,19 +871,64 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
 
 def main():
     """Main function."""
-    if len(sys.argv) < 2:
-        print("Usage: python balance_tracker.py <SYMBOL>")
-        print("Example: python balance_tracker.py AAPL")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Track balance/position for a specific symbol from analyzed trading events"
+    )
+    parser.add_argument(
+        "symbol",
+        type=str,
+        help="Stock symbol to track (e.g., AAPL)",
+    )
+    parser.add_argument(
+        "--input",
+        "-i",
+        type=str,
+        help="Path to input analyzed events JSON file (overrides default)",
+    )
+    parser.add_argument(
+        "--splits",
+        "-s",
+        type=str,
+        help="Path to splits.json file (overrides default)",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        help="Path to output report file (overrides default)",
+    )
 
-    symbol = sys.argv[1]
+    args = parser.parse_args()
+
+    symbol = args.symbol
     # Get project root (four levels up from this file: src -> tax-report -> apps -> root)
     project_root = Path(__file__).parent.parent.parent.parent
-    input_file = project_root / "data" / "taxable_activities_analyzed.json"
-    output_file = project_root / "data" / f"{symbol.upper()}_balance_report.txt"
+
+    # Set default paths or use overrides
+    if args.input:
+        input_file = Path(args.input)
+    else:
+        input_file = (
+            project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities_analyzed.json"
+        )
+
+    if args.output:
+        output_file = Path(args.output)
+    else:
+        output_file = (
+            project_root / "data" / "trading" / "alpaca" / "live" / f"{symbol.upper()}_balance_report.txt"
+        )
+
+    # Set splits file path
+    splits_file = None
+    if args.splits:
+        splits_file = str(Path(args.splits))
+    else:
+        # Default splits file location (same directory as input)
+        splits_file = str(input_file.parent / "splits.json")
 
     # Track balance
-    processed_events = track_balance(symbol, str(input_file))
+    processed_events = track_balance(symbol, str(input_file), splits_file)
 
     if processed_events:
         # Generate report
