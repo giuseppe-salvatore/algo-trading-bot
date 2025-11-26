@@ -23,7 +23,7 @@ This project contains two scripts for processing Alpaca trading activity data:
 
 ### Input File
 
-Place your `taxable_activities.json` file in the `data/` directory (at the project root). The file should contain an array of trading event objects with the following structure:
+Place your `taxable_activities.json` file in the `data/trading/alpaca/live/` directory (at the project root). The file should contain an array of trading event objects with the following structure:
 
 ```json
 {
@@ -49,16 +49,43 @@ Place your `taxable_activities.json` file in the `data/` directory (at the proje
 just analyze
 ```
 
+Or with custom input/output files:
+```bash
+./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/analyze_events.py \
+    --input path/to/input.json \
+    --output path/to/output.json
+```
+
 **balance_tracker:**
 ```bash
 just balance SYMBOL=AAPL
 ```
 
+Or with custom input/splits/output files:
+```bash
+./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py AAPL \
+    --input path/to/analyzed.json \
+    --splits path/to/splits.json \
+    --output path/to/report.txt
+```
+
+### Command-Line Options
+
+**analyze_events.py:**
+- `--input` / `-i`: Override input file path (default: `data/trading/alpaca/live/taxable_activities.json`)
+- `--output` / `-o`: Override output file path (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
+
+**balance_tracker.py:**
+- `SYMBOL` (required): Stock symbol to track
+- `--input` / `-i`: Override input analyzed events file (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
+- `--splits` / `-s`: Override splits file path (default: `data/trading/alpaca/live/splits.json`)
+- `--output` / `-o`: Override output report file (default: `data/trading/alpaca/live/reports/{SYMBOL}_balance_report.txt`)
+
 ### Output
 
-- **analyze_events.py**: Creates `data/taxable_activities_analyzed.json` with a sorted list of processable events (by transaction_time, older first). Events with the same order_id are reconciled into a single event with correct total quantities using `cum_qty`.
+- **analyze_events.py**: Creates `data/trading/alpaca/live/taxable_activities_analyzed.json` (by default) with a sorted list of processable events (by transaction_time, older first). Events with the same order_id are reconciled into a single event with correct total quantities using `cum_qty`.
 
-- **balance_tracker.py**: Creates `data/{SYMBOL}_balance_report.txt` with a human-readable report showing:
+- **balance_tracker.py**: Creates `data/trading/alpaca/live/reports/{SYMBOL}_balance_report.txt` (by default) with a human-readable report showing:
   - Event type (BUY/SELL)
   - Quantity
   - Unit price
@@ -72,7 +99,7 @@ just balance SYMBOL=AAPL
 
 ### analyze_events.py
 
-1. **Load Events**: Reads all events from `data/taxable_activities.json`
+1. **Load Events**: Reads all events from `data/trading/alpaca/live/taxable_activities.json` (default)
 2. **Group by Order ID**: Groups events that share the same `order_id`
 3. **Process Events**:
    - **Atomic Events** (single order_id): Added directly to processable list
@@ -95,7 +122,7 @@ The output will contain a single reconciled event with:
 
 ### balance_tracker.py
 
-1. **Load Analyzed Events**: Reads events from `data/taxable_activities_analyzed.json`
+1. **Load Analyzed Events**: Reads events from `data/trading/alpaca/live/taxable_activities_analyzed.json` (default)
 2. **Filter by Symbol**: Filters events for the specified symbol
 3. **Track Position Balance**:
    - Maintains running position quantity and cost basis
@@ -121,6 +148,15 @@ Date/Time            Side   Qty          Price        Cost Basis      Status    
 2024-01-30 09:45:00  SELL   7.0000       $165.00      $1,155.00       🔴 closed  0.0000       -            $93.33         $159.97
 ```
 
+## Test Data
+
+The project includes comprehensive test data covering various edge cases and scenarios. See [data/trading/alpaca/test/README.md](../../data/trading/alpaca/test/README.md) for:
+- Available test scenarios and what they target
+- How to use test data for development and testing
+- Examples of running scripts with test data
+
+Test data files are located in `data/trading/alpaca/test/` and are version-controlled (unlike live data which is git-ignored).
+
 ## Tax Accounting
 
 This system uses the **Average Cost Basis** method for calculating profit/loss. See [TAX_ACCOUNTING.md](TAX_ACCOUNTING.md) for detailed information about:
@@ -128,11 +164,18 @@ This system uses the **Average Cost Basis** method for calculating profit/loss. 
 - Tax compliance notes
 - Comparison with other methods (FIFO, Specific Identification)
 
+## Data Organization
+
+- **Live Data**: Confidential trading data is stored in `data/trading/alpaca/live/` and is git-ignored
+- **Test Data**: Test data for development and testing is stored in `data/trading/alpaca/test/` and is version-controlled
+- Scripts default to using live data locations but can be overridden with command-line arguments
+
 ## Notes
 
-- The scripts use only Python standard library modules (`json`, `collections`, `datetime`, `typing`, `pathlib`)
+- The scripts use only Python standard library modules (`json`, `collections`, `datetime`, `typing`, `pathlib`, `argparse`)
 - Transaction time comparison uses proper datetime parsing for accurate sorting
 - Warnings are printed to stdout for manual review
 - The output file preserves the original JSON structure and formatting
 - Scripts automatically resolve paths relative to the project root, so they work regardless of where they're executed from
 - Profit/loss is calculated on every sale (partial or full), which is correct for tax reporting
+- Stock splits are automatically applied based on splits.json file (defaults to same directory as input file)

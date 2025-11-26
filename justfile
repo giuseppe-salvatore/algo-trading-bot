@@ -25,11 +25,28 @@ analyze:
     @echo "Running analyze_events..."
     ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/analyze_events.py
 
+# Run analyze_events with test data
+test-analyze:
+    @echo "Running analyze_events on test data..."
+    ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/analyze_events.py \
+        --input data/trading/alpaca/test/taxable_activities.json \
+        --output data/trading/alpaca/test/taxable_activities_analyzed.json
+
 # Run balance_tracker script
 # Usage: just balance AAPL
 balance SYMBOL:
     @echo "Running balance_tracker for symbol {{SYMBOL}}..."
     ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py {{SYMBOL}}
+
+# Run balance_tracker with test data
+# Usage: just test-balance TEST_POS_OPEN
+test-balance SYMBOL:
+    @echo "Running balance_tracker for test symbol {{SYMBOL}}..."
+    @mkdir -p data/trading/alpaca/test/reports
+    @./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py {{SYMBOL}} \
+        --input data/trading/alpaca/test/taxable_activities_analyzed.json \
+        --splits data/trading/alpaca/test/splits.json \
+        --output data/trading/alpaca/test/reports/{{SYMBOL}}_balance_report.txt
 
 # Run tests for all packages
 test:
@@ -54,10 +71,13 @@ info:
 # Show help
 help:
     @echo "Available commands:"
+    @echo "Available commands:"
     @echo "  just install              - Install all dependencies"
     @echo "  just sync                 - Sync dependencies"
     @echo "  just analyze              - Run analyze_events script"
+    @echo "  just test-analyze         - Run analyze_events on test data"
     @echo "  just balance SYMBOL=X     - Run balance_tracker for symbol X"
+    @echo "  just test-balance SYMBOL=X - Run balance_tracker for test symbol X"
     @echo "  just test                 - Run tests"
     @echo "  just lint                 - Lint all Python files"
     @echo "  just format               - Format all Python files"

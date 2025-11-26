@@ -9,6 +9,7 @@ Takes a symbol as input and generates a human-readable report showing:
 - Position status (opened, updated, or closed)
 """
 
+import argparse
 import json
 import sys
 from datetime import datetime
@@ -254,6 +255,17 @@ def track_balance(
     Returns:
         List of processed events with balance information
     """
+    # Check if input file exists
+    input_path = Path(input_file)
+    if not input_path.exists():
+        error_msg = f"Error: Input file not found: {input_file}\n"
+        error_msg += "Please run the analyzer first to generate the analyzed events file.\n"
+        if "test" in str(input_file):
+            error_msg += "For test data, run: just test-analyze\n"
+        else:
+            error_msg += "For live data, run: just analyze\n"
+        raise FileNotFoundError(error_msg)
+
     # Load analyzed events
     print(f"Loading events from {input_file}...")
     with open(input_file, "r") as f:
@@ -347,7 +359,6 @@ def track_balance(
         profit = None
 
         # Normalize side (handle sell_short as sell)
-        original_side = side
         if side in ["sell_short", "sell"]:
             side = "sell"
 
@@ -682,6 +693,10 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
         print("No events to report")
         return
 
+    # Ensure output directory exists
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     with open(output_file, "w") as f:
         # Calculate total profit from all closed positions
         total_profit = sum(pe.get("profit", 0) or 0 for pe in processed_events)
@@ -792,7 +807,6 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
                 f.write("\n")
                 continue
 
-            event = pe["event"]
             side = pe["side"].upper()
             qty = pe["qty"]
             price = pe["price"]
@@ -872,19 +886,69 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
 
 def main():
     """Main function."""
-    if len(sys.argv) < 2:
-        print("Usage: python balance_tracker.py <SYMBOL>")
-        print("Example: python balance_tracker.py AAPL")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Track balance/position for a specific symbol from analyzed trading events"
+    )
+    parser.add_argument(
+        "symbol",
+        type=str,
+        help="Stock symbol to track (e.g., AAPL)",
+    )
+    parser.add_argument(
+        "--input",
+        "-i",
+        type=str,
+        help="Path to input analyzed events JSON file (overrides default)",
+    )
+    parser.add_argument(
+        "--splits",
+        "-s",
+        type=str,
+        help="Path to splits.json file (overrides default)",
+    )
+    parser.add_argument(
+        "--output",
+        "-o",
+        type=str,
+        help="Path to output report file (overrides default)",
+    )
 
-    symbol = sys.argv[1]
+    args = parser.parse_args()
+
+    symbol = args.symbol
     # Get project root (four levels up from this file: src -> tax-report -> apps -> root)
     project_root = Path(__file__).parent.parent.parent.parent
-    input_file = project_root / "data" / "taxable_activities_analyzed.json"
-    output_file = project_root / "data" / f"{symbol.upper()}_balance_report.txt"
+
+    # Set default paths or use overrides
+    if args.input:
+        input_file = Path(args.input)
+    else:
+        input_file = (
+            project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities_analyzed.json"
+        )
+
+    if args.output:
+        output_file = Path(args.output)
+    else:
+        # Default to reports subfolder in live directory
+        reports_dir = project_root / "data" / "trading" / "alpaca" / "live" / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / f"{symbol.upper()}_balance_report.txt"
+
+    # Set splits file path
+    splits_file = None
+    if args.splits:
+        splits_file = str(Path(args.splits))
+    else:
+        # Default splits file location (same directory as input)
+        splits_file = str(input_file.parent / "splits.json")
 
     # Track balance
-    processed_events = track_balance(symbol, str(input_file))
+    try:
+        processed_events = track_balance(symbol, str(input_file), splits_file)
+    except FileNotFoundError as e:
+        print(str(e))
+        sys.exit(1)
 
     if processed_events:
         # Generate report
