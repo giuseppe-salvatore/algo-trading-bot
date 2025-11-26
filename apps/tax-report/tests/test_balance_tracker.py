@@ -3,15 +3,15 @@
 Tests for balance_tracker.py
 """
 
-import sys
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from balance_tracker import track_balance, generate_report
+from balance_tracker import track_balance
 
 
 def create_test_events_file(events, filepath):

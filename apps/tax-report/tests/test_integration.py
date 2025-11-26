@@ -4,8 +4,8 @@ Integration tests for the full tax-report pipeline.
 Tests that events flow correctly from taxable_activities.json -> analyzed -> balance report.
 """
 
-import sys
 import json
+import sys
 import tempfile
 from pathlib import Path
 

@@ -12,10 +12,10 @@ Takes a symbol as input and generates a human-readable report showing:
 import argparse
 import json
 import sys
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
-from collections import defaultdict
+from typing import Any
 
 
 def format_datetime(iso_timestamp: str) -> str:
@@ -37,7 +37,7 @@ def format_number(value: float, decimals: int = 4) -> str:
     return f"{value:,.{decimals}f}"
 
 
-def load_splits(splits_file: str) -> Dict[str, List[Dict[str, Any]]]:
+def load_splits(splits_file: str) -> dict[str, list[dict[str, Any]]]:
     """
     Load splits from JSON file and organize by symbol and date.
 
@@ -48,7 +48,7 @@ def load_splits(splits_file: str) -> Dict[str, List[Dict[str, Any]]]:
         Dictionary mapping symbol -> list of splits sorted by date
     """
     try:
-        with open(splits_file, "r") as f:
+        with open(splits_file) as f:
             all_splits = json.load(f)
     except FileNotFoundError:
         print(
@@ -128,8 +128,10 @@ def load_splits(splits_file: str) -> Dict[str, List[Dict[str, Any]]]:
             continue
 
         # Calculate split ratio (how many new shares you get per old share)
-        # For a forward split (e.g., 3:1): from_qty=1, to_qty=3, ratio=3.0 (multiply position by 3)
-        # For a reverse split (e.g., 1:3): from_qty=3, to_qty=1, ratio=0.333 (multiply position by 0.333)
+        # For a forward split (e.g., 3:1): from_qty=1, to_qty=3, ratio=3.0
+        # (multiply position by 3)
+        # For a reverse split (e.g., 1:3): from_qty=3, to_qty=1, ratio=0.333
+        # (multiply position by 0.333)
         # The description format: "From QTY:X, To QTY:Y" means X old shares become Y new shares
         # So: ratio = Y / X (new shares per old share)
         # Use absolute values to handle negative quantities in descriptions
@@ -162,9 +164,9 @@ def apply_splits(
     avg_cost: float,
     symbol: str,
     current_date: str,
-    splits_by_symbol: Dict[str, List[Dict[str, Any]]],
-    last_processed_date: Optional[str] = None,
-) -> Tuple[float, float, float, List[Dict[str, Any]]]:
+    splits_by_symbol: dict[str, list[dict[str, Any]]],
+    last_processed_date: str | None = None,
+) -> tuple[float, float, float, list[dict[str, Any]]]:
     """
     Apply any splits that occurred between last_processed_date and current_date.
 
@@ -242,8 +244,8 @@ def apply_splits(
 
 
 def track_balance(
-    symbol: str, input_file: str, splits_file: Optional[str] = None
-) -> List[Dict[str, Any]]:
+    symbol: str, input_file: str, splits_file: str | None = None
+) -> list[dict[str, Any]]:
     """
     Track balance for a specific symbol from analyzed events.
 
@@ -268,7 +270,7 @@ def track_balance(
 
     # Load analyzed events
     print(f"Loading events from {input_file}...")
-    with open(input_file, "r") as f:
+    with open(input_file) as f:
         all_events = json.load(f)
 
     # Filter events for the symbol
@@ -296,7 +298,7 @@ def track_balance(
     cost_basis = 0.0  # Total cost basis
     avg_cost = 0.0  # Average cost per share
     accumulated_gains = 0.0  # Running total of profits from closed positions
-    last_processed_date: Optional[str] = None
+    last_processed_date: str | None = None
 
     processed_events = []
 
@@ -680,7 +682,7 @@ def track_balance(
     return processed_events
 
 
-def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_file: str):
+def generate_report(symbol: str, processed_events: list[dict[str, Any]], output_file: str):
     """
     Generate human-readable report file.
 
@@ -711,9 +713,12 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
 
         # Table header
         f.write("-" * 155 + "\n")
-        f.write(
-            f"{'Date/Time':<20} {'Side':<10} {'Qty':<12} {'Price':<12} {'Cost Basis':<15} {'Status':<10} {'Type':<6} {'Position':<12} {'Avg Cost':<12} {'Profit':<15} {'Accumulated Gains':<18}\n"
+        header = (
+            f"{'Date/Time':<20} {'Side':<10} {'Qty':<12} {'Price':<12} "
+            f"{'Cost Basis':<15} {'Status':<10} {'Type':<6} {'Position':<12} "
+            f"{'Avg Cost':<12} {'Profit':<15} {'Accumulated Gains':<18}\n"
         )
+        f.write(header)
         f.write("-" * 155 + "\n")
 
         # Process each event
@@ -740,8 +745,10 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
                     return a
 
                 # Normalize to get the simplest ratio
-                # For forward splits: from_qty shares become to_qty shares (e.g., 1 share becomes 3 shares = 1:3)
-                # For reverse splits: from_qty shares become to_qty shares (e.g., 3 shares become 1 share = 3:1)
+                # For forward splits: from_qty shares become to_qty shares
+                # (e.g., 1 share becomes 3 shares = 1:3)
+                # For reverse splits: from_qty shares become to_qty shares
+                # (e.g., 3 shares become 1 share = 3:1)
                 if ratio < 1.0:
                     split_type = "REVERSE SPLIT"
                     # Reverse split: more shares become fewer shares
@@ -800,9 +807,11 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
                 f.write(
                     f"Position: {format_number(prev_position)} -> {format_number(new_position)}, "
                 )
-                f.write(
-                    f"Avg Cost: {format_currency(prev_avg_cost)} -> {format_currency(new_avg_cost)}, "
+                avg_cost_change = (
+                    f"Avg Cost: {format_currency(prev_avg_cost)} -> "
+                    f"{format_currency(new_avg_cost)}, "
                 )
+                f.write(avg_cost_change)
                 f.write(f"Cost Basis: {format_currency(cost_basis)} (unchanged)\n")
                 f.write("\n")
                 continue
@@ -844,7 +853,8 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
             else:
                 profit_str = "-"
 
-            # Format accumulated gains (only show when it was updated, i.e., when profit is calculated)
+            # Format accumulated gains (only show when it was updated,
+            # i.e., when profit is calculated)
             accumulated_gains = pe.get("accumulated_gains", 0.0)
             if profit is not None:
                 accumulated_gains_str = format_currency(accumulated_gains)
@@ -852,10 +862,13 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
                 accumulated_gains_str = "-"
 
             # Write row
-            f.write(
-                f"{date_time:<20} {side:<10} {qty_str:<12} {price_str:<12} {cost_basis_str:<15} "
-                f"{status_icon} {status:<9} {position_type:<6} {position_str:<12} {avg_cost_str:<12} {profit_str:<15} {accumulated_gains_str:<18}\n"
+            row = (
+                f"{date_time:<20} {side:<10} {qty_str:<12} {price_str:<12} "
+                f"{cost_basis_str:<15} {status_icon} {status:<9} {position_type:<6} "
+                f"{position_str:<12} {avg_cost_str:<12} {profit_str:<15} "
+                f"{accumulated_gains_str:<18}\n"
             )
+            f.write(row)
 
             # Add empty line after closed positions
             if status == "closed":

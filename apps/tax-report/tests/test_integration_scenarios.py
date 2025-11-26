@@ -5,8 +5,8 @@ Tests that events flow correctly from test data -> analyzed -> balance report.
 Each test scenario targets a specific edge case or scenario.
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
 
 # Add src to path
