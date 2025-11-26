@@ -199,7 +199,7 @@ def test_partial_fill_realistic():
             "leaves_qty": "15",
             "order_id": "order-partial-1",
             "cum_qty": "5",
-            "order_status": "partially_filled"
+            "order_status": "partially_filled",
         },
         {
             "id": "test-partial-fill-2",
@@ -213,7 +213,7 @@ def test_partial_fill_realistic():
             "leaves_qty": "10",
             "order_id": "order-partial-1",
             "cum_qty": "10",
-            "order_status": "partially_filled"
+            "order_status": "partially_filled",
         },
         {
             "id": "test-partial-fill-3",
@@ -227,8 +227,8 @@ def test_partial_fill_realistic():
             "leaves_qty": "0",
             "order_id": "order-partial-1",
             "cum_qty": "20",
-            "order_status": "filled"
-        }
+            "order_status": "filled",
+        },
     ]
 
     from analyze_events import analyze_events

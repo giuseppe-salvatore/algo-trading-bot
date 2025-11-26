@@ -129,7 +129,9 @@ def analyze_events(input_file: str) -> List[Dict[str, Any]]:
     input_path = Path(input_file)
     if not input_path.exists():
         error_msg = f"Error: Input file not found: {input_file}\n"
-        error_msg += "Please ensure the taxable_activities.json file exists in the specified location.\n"
+        error_msg += (
+            "Please ensure the taxable_activities.json file exists in the specified location.\n"
+        )
         raise FileNotFoundError(error_msg)
 
     # Load the JSON file
@@ -195,12 +197,21 @@ def main():
     if args.input:
         input_file = Path(args.input)
     else:
-        input_file = project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities.json"
+        input_file = (
+            project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities.json"
+        )
 
     if args.output:
         output_file = Path(args.output)
     else:
-        output_file = project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities_analyzed.json"
+        output_file = (
+            project_root
+            / "data"
+            / "trading"
+            / "alpaca"
+            / "live"
+            / "taxable_activities_analyzed.json"
+        )
 
     try:
         processable_events = analyze_events(str(input_file))

@@ -924,7 +924,12 @@ def main():
         input_file = Path(args.input)
     else:
         input_file = (
-            project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities_analyzed.json"
+            project_root
+            / "data"
+            / "trading"
+            / "alpaca"
+            / "live"
+            / "taxable_activities_analyzed.json"
         )
 
     if args.output:

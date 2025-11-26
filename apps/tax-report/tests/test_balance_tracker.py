@@ -293,7 +293,7 @@ def test_forward_split():
             "symbol": "TEST_FW_SPLIT",
             "qty": "-10",
             "price": "100.00",
-            "status": "executed"
+            "status": "executed",
         },
         {
             "id": "split-add",
@@ -305,8 +305,8 @@ def test_forward_split():
             "symbol": "TEST_FW_SPLIT",
             "qty": "30",
             "price": "33.33",
-            "status": "executed"
-        }
+            "status": "executed",
+        },
     ]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -365,7 +365,7 @@ def test_backward_split():
             "symbol": "TEST_BW_SPLIT",
             "qty": "-30",
             "price": "100.00",
-            "status": "executed"
+            "status": "executed",
         },
         {
             "id": "split-add",
@@ -378,8 +378,8 @@ def test_backward_split():
             "symbol": "TEST_BW_SPLIT",
             "qty": "10",
             "price": "300.00",
-            "status": "executed"
-        }
+            "status": "executed",
+        },
     ]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
