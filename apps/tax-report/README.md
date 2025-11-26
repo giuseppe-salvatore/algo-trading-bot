@@ -79,13 +79,13 @@ Or with custom input/splits/output files:
 - `SYMBOL` (required): Stock symbol to track
 - `--input` / `-i`: Override input analyzed events file (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
 - `--splits` / `-s`: Override splits file path (default: `data/trading/alpaca/live/splits.json`)
-- `--output` / `-o`: Override output report file (default: `data/trading/alpaca/live/{SYMBOL}_balance_report.txt`)
+- `--output` / `-o`: Override output report file (default: `data/trading/alpaca/live/reports/{SYMBOL}_balance_report.txt`)
 
 ### Output
 
 - **analyze_events.py**: Creates `data/trading/alpaca/live/taxable_activities_analyzed.json` (by default) with a sorted list of processable events (by transaction_time, older first). Events with the same order_id are reconciled into a single event with correct total quantities using `cum_qty`.
 
-- **balance_tracker.py**: Creates `data/trading/alpaca/live/{SYMBOL}_balance_report.txt` (by default) with a human-readable report showing:
+- **balance_tracker.py**: Creates `data/trading/alpaca/live/reports/{SYMBOL}_balance_report.txt` (by default) with a human-readable report showing:
   - Event type (BUY/SELL)
   - Quantity
   - Unit price

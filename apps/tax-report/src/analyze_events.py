@@ -11,6 +11,7 @@ Script to analyze events in taxable_activities.json.
 
 import argparse
 import json
+import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -124,6 +125,13 @@ def analyze_events(input_file: str) -> List[Dict[str, Any]]:
     Returns:
         List of processable events, sorted by transaction_time (older first)
     """
+    # Check if input file exists
+    input_path = Path(input_file)
+    if not input_path.exists():
+        error_msg = f"Error: Input file not found: {input_file}\n"
+        error_msg += "Please ensure the taxable_activities.json file exists in the specified location.\n"
+        raise FileNotFoundError(error_msg)
+
     # Load the JSON file
     print(f"Loading events from {input_file}...")
     with open(input_file, "r") as f:
@@ -194,7 +202,11 @@ def main():
     else:
         output_file = project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities_analyzed.json"
 
-    processable_events = analyze_events(str(input_file))
+    try:
+        processable_events = analyze_events(str(input_file))
+    except FileNotFoundError as e:
+        print(str(e))
+        sys.exit(1)
 
     # Optionally write to file for inspection
     print(f"\nWriting {len(processable_events)} processable events to {output_file}...")

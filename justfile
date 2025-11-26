@@ -42,10 +42,11 @@ balance SYMBOL:
 # Usage: just test-balance TEST_POS_OPEN
 test-balance SYMBOL:
     @echo "Running balance_tracker for test symbol {{SYMBOL}}..."
+    @mkdir -p data/trading/alpaca/test/reports
     @./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py {{SYMBOL}} \
         --input data/trading/alpaca/test/taxable_activities_analyzed.json \
         --splits data/trading/alpaca/test/splits.json \
-        --output data/trading/alpaca/test/{{SYMBOL}}_balance_report.txt
+        --output data/trading/alpaca/test/reports/{{SYMBOL}}_balance_report.txt
 
 # Run tests for all packages
 test:

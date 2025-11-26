@@ -16,7 +16,11 @@ __pycache__/
 dist/
 build/
 
-# Data files (contain confidential information)
-# Ignore live trading data (confidential)
+# Ignore live trading data only track test data
 data/trading/alpaca/live/
-# Keep test data tracked in git
+# Ignore generated reports (both live and test)
+data/trading/alpaca/test/reports/
+data/trading/alpaca/live/reports/
+
+# This is a generated file by the balance_tracker script, don't need to track it
+data/trading/alpaca/test/taxable_activities_analyzed.json

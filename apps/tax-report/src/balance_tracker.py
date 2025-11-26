@@ -255,6 +255,17 @@ def track_balance(
     Returns:
         List of processed events with balance information
     """
+    # Check if input file exists
+    input_path = Path(input_file)
+    if not input_path.exists():
+        error_msg = f"Error: Input file not found: {input_file}\n"
+        error_msg += "Please run the analyzer first to generate the analyzed events file.\n"
+        if "test" in str(input_file):
+            error_msg += "For test data, run: just test-analyze\n"
+        else:
+            error_msg += "For live data, run: just analyze\n"
+        raise FileNotFoundError(error_msg)
+
     # Load analyzed events
     print(f"Loading events from {input_file}...")
     with open(input_file, "r") as f:
@@ -682,6 +693,10 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
         print("No events to report")
         return
 
+    # Ensure output directory exists
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
     with open(output_file, "w") as f:
         # Calculate total profit from all closed positions
         total_profit = sum(pe.get("profit", 0) or 0 for pe in processed_events)
@@ -915,9 +930,10 @@ def main():
     if args.output:
         output_file = Path(args.output)
     else:
-        output_file = (
-            project_root / "data" / "trading" / "alpaca" / "live" / f"{symbol.upper()}_balance_report.txt"
-        )
+        # Default to reports subfolder in live directory
+        reports_dir = project_root / "data" / "trading" / "alpaca" / "live" / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / f"{symbol.upper()}_balance_report.txt"
 
     # Set splits file path
     splits_file = None
@@ -928,7 +944,11 @@ def main():
         splits_file = str(input_file.parent / "splits.json")
 
     # Track balance
-    processed_events = track_balance(symbol, str(input_file), splits_file)
+    try:
+        processed_events = track_balance(symbol, str(input_file), splits_file)
+    except FileNotFoundError as e:
+        print(str(e))
+        sys.exit(1)
 
     if processed_events:
         # Generate report

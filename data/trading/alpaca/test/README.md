@@ -199,7 +199,7 @@ just test-balance TEST_POS_OPEN
 This will:
 1. Use the analyzed test events
 2. Use the test splits file
-3. Generate a balance report in the test directory
+3. Generate a balance report in the test/reports directory
 
 ### Manual Script Usage
 
@@ -215,7 +215,7 @@ You can also use the scripts directly with test data:
 ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py TEST_POS_OPEN \
     --input data/trading/alpaca/test/taxable_activities_analyzed.json \
     --splits data/trading/alpaca/test/splits.json \
-    --output data/trading/alpaca/test/TEST_POS_OPEN_balance_report.txt
+    --output data/trading/alpaca/test/reports/TEST_POS_OPEN_balance_report.txt
 ```
 
 ## Notes
