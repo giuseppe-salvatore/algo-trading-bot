@@ -264,12 +264,12 @@ def test_partial_fill_realistic():
 def test_partial_fills_with_incorrect_cum_qty():
     """
     Test the bug scenario: partial fills with incorrect cum_qty values.
-    
+
     This tests the specific bug found in SQQQ order b99dfb61-63c4-4f48-8cbf-20e51d5406d0:
     - Event 1: qty=236, cum_qty=300 (incorrect - cum_qty should be 236)
     - Event 2: qty=64, cum_qty=64 (incorrect - cum_qty should be 300 if cumulative)
     - Total should be 236+64=300, NOT the last event's cum_qty (64)
-    
+
     The fix ensures we sum qty values instead of using last event's cum_qty.
     """
     events = [
@@ -396,8 +396,10 @@ def test_partial_fills_with_incorrect_cum_qty_integration():
         assert len(analyzed) == 3
 
         # Find the reconciled sell order
-        sell_order = [e for e in analyzed if e.get("order_id") == "b99dfb61-63c4-4f48-8cbf-20e51d5406d0"][0]
-        
+        sell_order = [
+            e for e in analyzed if e.get("order_id") == "b99dfb61-63c4-4f48-8cbf-20e51d5406d0"
+        ][0]
+
         # Should have qty=300 (sum of 236+64), NOT 64 (last cum_qty)
         assert float(sell_order["qty"]) == 300.0, f"Expected qty=300.0, got {sell_order['qty']}"
         assert float(sell_order["cum_qty"]) == 300.0
