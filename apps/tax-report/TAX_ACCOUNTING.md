@@ -92,3 +92,4 @@ The report shows **Accumulated Gains** which is the running total of all realize
 
 4. **Consistency**: The same average cost basis method is used for both position tracking and profit calculation, ensuring consistency.
 
+
