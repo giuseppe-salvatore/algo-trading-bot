@@ -5,8 +5,8 @@ Tests that events flow correctly from test data -> analyzed -> balance report.
 Each test scenario targets a specific edge case or scenario.
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
 
 # Add src to path
@@ -34,6 +34,7 @@ def test_scenario_pos_open():
 
     # Write to temp file for balance tracking
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(test_events, f, indent=2)
         temp_analyzed = f.name
@@ -64,6 +65,7 @@ def test_scenario_forward_split():
 
     # Write to temp file for balance tracking
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(test_events, f, indent=2)
         temp_analyzed = f.name
@@ -98,6 +100,7 @@ def test_scenario_backward_split():
 
     # Write to temp file for balance tracking
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(test_events, f, indent=2)
         temp_analyzed = f.name
@@ -130,6 +133,7 @@ def test_scenario_short_only():
 
     # Write to temp file for balance tracking
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(test_events, f, indent=2)
         temp_analyzed = f.name
@@ -165,6 +169,7 @@ def test_scenario_partial_fill():
 
     # Write to temp file for balance tracking
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(test_events, f, indent=2)
         temp_analyzed = f.name
@@ -194,6 +199,7 @@ def test_scenario_reverse_long():
 
     # Write to temp file for balance tracking
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(test_events, f, indent=2)
         temp_analyzed = f.name
@@ -209,7 +215,9 @@ def test_scenario_reverse_long():
         assert processed[-1]["side"] == "sell_short"
 
         # Should have closed long position first
-        closed_events = [e for e in processed if e.get("status") == "closed" and e.get("prev_position", 0) > 0]
+        closed_events = [
+            e for e in processed if e.get("status") == "closed" and e.get("prev_position", 0) > 0
+        ]
         assert len(closed_events) > 0
 
         print("✓ test_scenario_reverse_long passed")
@@ -228,6 +236,7 @@ def test_scenario_reverse_short():
 
     # Write to temp file for balance tracking
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(test_events, f, indent=2)
         temp_analyzed = f.name
@@ -242,7 +251,9 @@ def test_scenario_reverse_short():
         assert processed[-1]["position_after"] > 0
 
         # Should have closed short position first
-        closed_events = [e for e in processed if e.get("status") == "closed" and e.get("prev_position", 0) < 0]
+        closed_events = [
+            e for e in processed if e.get("status") == "closed" and e.get("prev_position", 0) < 0
+        ]
         assert len(closed_events) > 0
 
         print("✓ test_scenario_reverse_short passed")
@@ -260,4 +271,3 @@ if __name__ == "__main__":
     test_scenario_reverse_long()
     test_scenario_reverse_short()
     print("\n✅ All integration scenario tests passed!")
-

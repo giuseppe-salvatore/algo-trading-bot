@@ -9,7 +9,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from analyze_events import reconcile_events, is_partial_fill
+from analyze_events import is_partial_fill, reconcile_events
 
 
 def test_reconcile_same_price_with_partial_fills():
@@ -135,13 +135,13 @@ def test_reconcile_single_event():
 def test_is_partial_fill():
     """Test partial fill detection."""
     partial_fill_event = {"type": "partial_fill", "order_status": "filled"}
-    assert is_partial_fill(partial_fill_event) == True
+    assert is_partial_fill(partial_fill_event)
 
     partial_fill_event2 = {"type": "fill", "order_status": "partially_filled"}
-    assert is_partial_fill(partial_fill_event2) == True
+    assert is_partial_fill(partial_fill_event2)
 
     fill_event = {"type": "fill", "order_status": "filled"}
-    assert is_partial_fill(fill_event) == False
+    assert not is_partial_fill(fill_event)
 
     print("✓ test_is_partial_fill passed")
 
@@ -199,7 +199,7 @@ def test_partial_fill_realistic():
             "leaves_qty": "15",
             "order_id": "order-partial-1",
             "cum_qty": "5",
-            "order_status": "partially_filled"
+            "order_status": "partially_filled",
         },
         {
             "id": "test-partial-fill-2",
@@ -213,7 +213,7 @@ def test_partial_fill_realistic():
             "leaves_qty": "10",
             "order_id": "order-partial-1",
             "cum_qty": "10",
-            "order_status": "partially_filled"
+            "order_status": "partially_filled",
         },
         {
             "id": "test-partial-fill-3",
@@ -227,14 +227,15 @@ def test_partial_fill_realistic():
             "leaves_qty": "0",
             "order_id": "order-partial-1",
             "cum_qty": "20",
-            "order_status": "filled"
-        }
+            "order_status": "filled",
+        },
     ]
 
-    from analyze_events import analyze_events
-    import tempfile
     import json
+    import tempfile
     from pathlib import Path
+
+    from analyze_events import analyze_events
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(events, f, indent=2)

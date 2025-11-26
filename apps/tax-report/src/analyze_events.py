@@ -15,15 +15,15 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 
-def is_partial_fill(event: Dict[str, Any]) -> bool:
+def is_partial_fill(event: dict[str, Any]) -> bool:
     """Check if an event is a partial fill."""
     return event.get("type") == "partial_fill" or event.get("order_status") == "partially_filled"
 
 
-def reconcile_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def reconcile_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Reconcile multiple events with the same order_id.
 
@@ -94,7 +94,7 @@ def reconcile_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     )
 
     # Calculate weighted average price
-    total_value = sum(price * qty for price, qty in zip(prices, qtys))
+    total_value = sum(price * qty for price, qty in zip(prices, qtys, strict=True))
     total_qty = sum(qtys)
 
     if total_qty > 0:
@@ -115,7 +115,7 @@ def reconcile_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     return reconciled
 
 
-def analyze_events(input_file: str) -> List[Dict[str, Any]]:
+def analyze_events(input_file: str) -> list[dict[str, Any]]:
     """
     Analyze events from JSON file and return a list of processable events.
 
@@ -129,12 +129,14 @@ def analyze_events(input_file: str) -> List[Dict[str, Any]]:
     input_path = Path(input_file)
     if not input_path.exists():
         error_msg = f"Error: Input file not found: {input_file}\n"
-        error_msg += "Please ensure the taxable_activities.json file exists in the specified location.\n"
+        error_msg += (
+            "Please ensure the taxable_activities.json file exists in the specified location.\n"
+        )
         raise FileNotFoundError(error_msg)
 
     # Load the JSON file
     print(f"Loading events from {input_file}...")
-    with open(input_file, "r") as f:
+    with open(input_file) as f:
         events = json.load(f)
 
     print(f"Loaded {len(events)} events")
@@ -151,7 +153,7 @@ def analyze_events(input_file: str) -> List[Dict[str, Any]]:
     # Process events
     processable_events = []
 
-    for order_id, order_events in events_by_order_id.items():
+    for _order_id, order_events in events_by_order_id.items():
         if len(order_events) == 1:
             # Atomic event - add directly to processable list
             processable_events.append(order_events[0])
@@ -195,12 +197,21 @@ def main():
     if args.input:
         input_file = Path(args.input)
     else:
-        input_file = project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities.json"
+        input_file = (
+            project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities.json"
+        )
 
     if args.output:
         output_file = Path(args.output)
     else:
-        output_file = project_root / "data" / "trading" / "alpaca" / "live" / "taxable_activities_analyzed.json"
+        output_file = (
+            project_root
+            / "data"
+            / "trading"
+            / "alpaca"
+            / "live"
+            / "taxable_activities_analyzed.json"
+        )
 
     try:
         processable_events = analyze_events(str(input_file))

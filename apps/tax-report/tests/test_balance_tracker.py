@@ -3,15 +3,15 @@
 Tests for balance_tracker.py
 """
 
-import sys
 import json
+import sys
 import tempfile
 from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from balance_tracker import track_balance, generate_report
+from balance_tracker import track_balance
 
 
 def create_test_events_file(events, filepath):
@@ -293,7 +293,7 @@ def test_forward_split():
             "symbol": "TEST_FW_SPLIT",
             "qty": "-10",
             "price": "100.00",
-            "status": "executed"
+            "status": "executed",
         },
         {
             "id": "split-add",
@@ -305,8 +305,8 @@ def test_forward_split():
             "symbol": "TEST_FW_SPLIT",
             "qty": "30",
             "price": "33.33",
-            "status": "executed"
-        }
+            "status": "executed",
+        },
     ]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
@@ -365,7 +365,7 @@ def test_backward_split():
             "symbol": "TEST_BW_SPLIT",
             "qty": "-30",
             "price": "100.00",
-            "status": "executed"
+            "status": "executed",
         },
         {
             "id": "split-add",
@@ -378,8 +378,8 @@ def test_backward_split():
             "symbol": "TEST_BW_SPLIT",
             "qty": "10",
             "price": "300.00",
-            "status": "executed"
-        }
+            "status": "executed",
+        },
     ]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
