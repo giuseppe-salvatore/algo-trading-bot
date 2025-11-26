@@ -243,19 +243,210 @@ def apply_splits(
     return position, cost_basis, avg_cost, applied_splits
 
 
+def load_name_changes(name_changes_file: str) -> dict[str, Any]:
+    """
+    Load name changes from JSON file and build bidirectional mappings.
+
+    Args:
+        name_changes_file: Path to name_changes.json file
+
+    Returns:
+        Dictionary containing:
+        - symbol_to_latest: Maps any symbol (old or new) to its latest/current name
+        - latest_to_all_names: Maps latest symbol to list of all its historical names
+        - name_change_history: Dictionary mapping latest symbol to ordered list of name changes
+    """
+    try:
+        with open(name_changes_file) as f:
+            all_name_changes = json.load(f)
+    except FileNotFoundError:
+        print(
+            f"Warning: Name changes file {name_changes_file} not found. "
+            "Continuing without name change consolidation."
+        )
+        return {
+            "symbol_to_latest": {},
+            "latest_to_all_names": {},
+            "name_change_history": {},
+        }
+
+    # Build change pairs from description: "Name Change from OLD to NEW"
+    change_pairs = []
+    processed_pairs = set()
+
+    for change in all_name_changes:
+        description = change.get("description", "")
+        if "Name Change from" not in description:
+            continue
+
+        # Parse: "Name Change from OLD to NEW"
+        try:
+            # Extract old and new symbol from description
+            parts = description.split("Name Change from")
+            if len(parts) < 2:
+                continue
+            remainder = parts[1].strip()
+            if " to " not in remainder:
+                continue
+
+            old_new = remainder.split(" to ", 1)
+            if len(old_new) != 2:
+                continue
+
+            old_symbol = old_new[0].strip().upper()
+            new_symbol = old_new[1].strip().upper()
+
+            # Only process entries where new_symbol is present (the "to" part)
+            # Skip entries where old_symbol is present (the "from" part)
+            # We'll process those via the "to" entries
+            symbol = change.get("symbol", "").upper()
+            if symbol == new_symbol:
+                pair_key = (old_symbol, new_symbol)
+                if pair_key not in processed_pairs:
+                    change_pairs.append(
+                        {
+                            "from": old_symbol,
+                            "to": new_symbol,
+                            "date": change.get("date", ""),
+                        }
+                    )
+                    processed_pairs.add(pair_key)
+        except (ValueError, IndexError):
+            continue
+
+    # Build mappings
+    symbol_to_latest: dict[str, str] = {}
+    latest_to_all_names: dict[str, list[str]] = {}
+    name_change_history: dict[str, list[dict[str, str]]] = {}
+
+    # Process change pairs to handle chained changes (e.g., MF -> MFLTF -> MFLTY)
+    # Build a graph of changes
+    change_graph: dict[str, str] = {}  # Maps old -> new for direct changes
+    for pair in change_pairs:
+        old_sym = pair["from"]
+        new_sym = pair["to"]
+        change_graph[old_sym] = new_sym
+
+    # For each starting symbol, traverse the chain to find the latest
+    all_symbols_seen = set()
+    for old_sym, new_sym in change_graph.items():
+        all_symbols_seen.add(old_sym)
+        all_symbols_seen.add(new_sym)
+
+    # Traverse chains to find latest symbol for each starting symbol
+    for start_symbol in all_symbols_seen:
+        current = start_symbol
+        chain = [current]
+        change_chain = []
+
+        # Follow the chain until we reach a symbol that doesn't change
+        while current in change_graph:
+            next_symbol = change_graph[current]
+            # Check for circular references
+            if next_symbol in chain:
+                break
+            chain.append(next_symbol)
+            # Find the date for this change
+            change_date = None
+            for pair in change_pairs:
+                if pair["from"] == current and pair["to"] == next_symbol:
+                    change_date = pair["date"]
+                    break
+            change_chain.append(
+                {
+                    "from": current,
+                    "to": next_symbol,
+                    "date": change_date or "",
+                }
+            )
+            current = next_symbol
+
+        latest_symbol = current
+        all_names = chain
+
+        # Update mappings
+        for sym in all_names:
+            symbol_to_latest[sym] = latest_symbol
+
+        if latest_symbol not in latest_to_all_names:
+            latest_to_all_names[latest_symbol] = []
+            name_change_history[latest_symbol] = []
+
+        # Add names if not already present
+        for sym in all_names:
+            if sym not in latest_to_all_names[latest_symbol]:
+                latest_to_all_names[latest_symbol].append(sym)
+
+        # Add change history
+        name_change_history[latest_symbol].extend(change_chain)
+
+        # Also ensure the latest symbol maps to itself
+        symbol_to_latest[latest_symbol] = latest_symbol
+        if latest_symbol not in latest_to_all_names[latest_symbol]:
+            latest_to_all_names[latest_symbol].append(latest_symbol)
+
+    # Sort change history by date
+    for latest_sym in name_change_history:
+        name_change_history[latest_sym].sort(key=lambda x: x.get("date", ""))
+
+    return {
+        "symbol_to_latest": symbol_to_latest,
+        "latest_to_all_names": latest_to_all_names,
+        "name_change_history": name_change_history,
+    }
+
+
+def resolve_symbol(
+    symbol: str, name_changes_mapping: dict[str, Any]
+) -> tuple[str, list[str], list[dict[str, str]]]:
+    """
+    Resolve input symbol to latest symbol and get all related symbols.
+
+    Args:
+        symbol: Input symbol to resolve
+        name_changes_mapping: Dictionary from load_name_changes()
+
+    Returns:
+        Tuple of (latest_symbol, list_of_all_related_symbols, name_change_history)
+    """
+    symbol_upper = symbol.upper()
+    symbol_to_latest = name_changes_mapping.get("symbol_to_latest", {})
+    latest_to_all_names = name_changes_mapping.get("latest_to_all_names", {})
+    name_change_history = name_changes_mapping.get("name_change_history", {})
+
+    # If symbol has no name changes, return as-is
+    if symbol_upper not in symbol_to_latest:
+        return symbol_upper, [symbol_upper], []
+
+    latest_symbol = symbol_to_latest[symbol_upper]
+    all_names = latest_to_all_names.get(latest_symbol, [latest_symbol])
+    history = name_change_history.get(latest_symbol, [])
+
+    return latest_symbol, all_names, history
+
+
 def track_balance(
-    symbol: str, input_file: str, splits_file: str | None = None
-) -> list[dict[str, Any]]:
+    symbol: str,
+    input_file: str,
+    splits_file: str | None = None,
+    name_changes_file: str | None = None,
+) -> tuple[list[dict[str, Any]], str, list[dict[str, str]]]:
     """
     Track balance for a specific symbol from analyzed events.
 
     Args:
         symbol: Stock symbol to track
         input_file: Path to analyzed events JSON file
-        splits_file: Optional path to splits.json file. If None, will look in data directory.
+        splits_file: Optional path to splits.json file.
+            If None, will look in data directory.
+        name_changes_file: Optional path to name_changes.json file.
+            If None, will look in data directory.
 
     Returns:
-        List of processed events with balance information
+        Tuple of (processed_events, latest_symbol, name_change_history)
+        where processed_events is a list of processed events with balance information,
+        latest_symbol is the resolved latest symbol name, and name_change_history is
+        the list of name changes for this symbol (empty if no changes)
     """
     # Check if input file exists
     input_path = Path(input_file)
@@ -268,19 +459,50 @@ def track_balance(
             error_msg += "For live data, run: just analyze\n"
         raise FileNotFoundError(error_msg)
 
+    # Load name changes
+    if name_changes_file is None:
+        # Try to find name_changes.json in the data directory (same as input_file)
+        input_path = Path(input_file)
+        name_changes_file = input_path.parent / "name_changes.json"
+
+    name_changes_mapping = load_name_changes(str(name_changes_file))
+
+    # Resolve symbol to latest and get all related symbols
+    latest_symbol, all_related_symbols, name_change_history = resolve_symbol(
+        symbol, name_changes_mapping
+    )
+
+    if latest_symbol != symbol.upper():
+        print(f"Symbol {symbol.upper()} resolved to latest name: {latest_symbol}")
+        if name_change_history:
+            change_desc = " → ".join([h["from"] for h in name_change_history] + [latest_symbol])
+            print(f"Name change history: {change_desc}")
+
     # Load analyzed events
     print(f"Loading events from {input_file}...")
     with open(input_file) as f:
         all_events = json.load(f)
 
-    # Filter events for the symbol
-    symbol_events = [e for e in all_events if e.get("symbol", "").upper() == symbol.upper()]
+    # Filter events for all related symbols (old and new names)
+    symbol_events = [
+        e
+        for e in all_events
+        if e.get("symbol", "").upper() in [s.upper() for s in all_related_symbols]
+    ]
 
     if not symbol_events:
-        print(f"No events found for symbol {symbol}")
-        return []
+        print(f"No events found for symbol {symbol.upper()} or its related names")
+        return [], latest_symbol, name_change_history
 
-    print(f"Found {len(symbol_events)} events for symbol {symbol}")
+    # Normalize all event symbols to use latest symbol name
+    for event in symbol_events:
+        event["symbol"] = latest_symbol
+
+    related_names_str = ", ".join(all_related_symbols)
+    print(
+        f"Found {len(symbol_events)} events for symbol {latest_symbol} "
+        f"(including related names: {related_names_str})"
+    )
 
     # Load splits
     if splits_file is None:
@@ -679,17 +901,23 @@ def track_balance(
             }
         )
 
-    return processed_events
+    return processed_events, latest_symbol, name_change_history
 
 
-def generate_report(symbol: str, processed_events: list[dict[str, Any]], output_file: str):
+def generate_report(
+    symbol: str,
+    processed_events: list[dict[str, Any]],
+    output_file: str,
+    name_change_history: list[dict[str, str]] | None = None,
+):
     """
     Generate human-readable report file.
 
     Args:
-        symbol: Stock symbol
+        symbol: Stock symbol (latest/current name)
         processed_events: List of processed events with balance info
         output_file: Path to output text file
+        name_change_history: Optional list of name changes for this symbol
     """
     if not processed_events:
         print("No events to report")
@@ -707,6 +935,15 @@ def generate_report(symbol: str, processed_events: list[dict[str, Any]], output_
         f.write("=" * 80 + "\n")
         f.write(f"Balance Tracker Report for {symbol.upper()}\n")
         f.write("=" * 80 + "\n\n")
+
+        # Show name change history if applicable
+        if name_change_history:
+            change_names = [h["from"] for h in name_change_history] + [symbol.upper()]
+            change_desc = " → ".join(change_names)
+            f.write("⚠️  SYMBOL NAME CHANGE DETECTED\n")
+            f.write(f"Symbol Name History: {change_desc}\n")
+            f.write("This report consolidates events from all related symbol names.\n\n")
+
         f.write(f"Total Events: {len(processed_events)}\n")
         f.write(f"Total Profit: {format_currency(total_profit)}\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
@@ -920,6 +1157,12 @@ def main():
         help="Path to splits.json file (overrides default)",
     )
     parser.add_argument(
+        "--name-changes",
+        "-n",
+        type=str,
+        help="Path to name_changes.json file (overrides default)",
+    )
+    parser.add_argument(
         "--output",
         "-o",
         type=str,
@@ -945,14 +1188,6 @@ def main():
             / "taxable_activities_analyzed.json"
         )
 
-    if args.output:
-        output_file = Path(args.output)
-    else:
-        # Default to reports subfolder in live directory
-        reports_dir = project_root / "data" / "trading" / "alpaca" / "live" / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / f"{symbol.upper()}_balance_report.txt"
-
     # Set splits file path
     splits_file = None
     if args.splits:
@@ -961,17 +1196,52 @@ def main():
         # Default splits file location (same directory as input)
         splits_file = str(input_file.parent / "splits.json")
 
-    # Track balance
+    # Set name changes file path
+    name_changes_file = None
+    if args.name_changes:
+        name_changes_file = str(Path(args.name_changes))
+    else:
+        # Default name_changes file location (same directory as input)
+        name_changes_file = str(input_file.parent / "name_changes.json")
+
+    # Track balance (this will resolve symbol internally)
     try:
-        processed_events = track_balance(symbol, str(input_file), splits_file)
+        processed_events, latest_symbol, name_change_history = track_balance(
+            symbol, str(input_file), splits_file, name_changes_file
+        )
     except FileNotFoundError as e:
         print(str(e))
         sys.exit(1)
 
+    # Determine output filename using latest symbol
+    if args.output:
+        output_file = Path(args.output)
+    else:
+        # Default to reports subfolder in live/test directory (based on input path)
+        reports_dir = input_file.parent / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        output_file = reports_dir / f"{latest_symbol.upper()}_balance_report.txt"
+
     if processed_events:
-        # Generate report
-        generate_report(symbol, processed_events, str(output_file))
-        print(f"\nBalance tracking complete for {symbol.upper()}")
+        # Generate report using latest symbol
+        generate_report(latest_symbol, processed_events, str(output_file), name_change_history)
+
+        # Create symlink if input symbol differs from latest symbol
+        if symbol.upper() != latest_symbol.upper():
+            input_symbol_report = output_file.parent / f"{symbol.upper()}_balance_report.txt"
+            try:
+                if input_symbol_report.exists():
+                    input_symbol_report.unlink()
+                input_symbol_report.symlink_to(output_file.name)
+                print(f"Created symlink: {input_symbol_report.name} -> {output_file.name}")
+            except (OSError, NotImplementedError):
+                # On Windows or if symlinks aren't supported, just print a note
+                print(
+                    f"Note: Report generated as {output_file.name} "
+                    f"(symbol resolved from {symbol.upper()} to {latest_symbol.upper()})"
+                )
+
+        print(f"\nBalance tracking complete for {latest_symbol.upper()}")
     else:
         print(f"No events found for symbol {symbol}")
 

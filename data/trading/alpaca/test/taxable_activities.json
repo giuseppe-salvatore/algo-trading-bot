@@ -250,6 +250,34 @@
         "order_id": "order-reverse-short-2",
         "cum_qty": "10",
         "order_status": "filled"
+    },
+    {
+        "id": "20240801100000001::test-sym-cng-1",
+        "activity_type": "FILL",
+        "transaction_time": "2024-08-01T10:00:00Z",
+        "type": "fill",
+        "price": "100.00",
+        "qty": "10",
+        "side": "buy",
+        "symbol": "TEST_SYM_CNG",
+        "leaves_qty": "0",
+        "order_id": "order-sym-cng-1",
+        "cum_qty": "10",
+        "order_status": "filled"
+    },
+    {
+        "id": "20240801120000002::test-sym-cng1-1",
+        "activity_type": "FILL",
+        "transaction_time": "2024-08-01T12:00:00Z",
+        "type": "fill",
+        "price": "110.00",
+        "qty": "10",
+        "side": "sell",
+        "symbol": "TEST_SYM_CNG1",
+        "leaves_qty": "0",
+        "order_id": "order-sym-cng1-1",
+        "cum_qty": "10",
+        "order_status": "filled"
     }
 ]
 

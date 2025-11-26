@@ -40,7 +40,7 @@ def test_scenario_pos_open():
         temp_analyzed = f.name
 
     try:
-        processed = track_balance("TEST_POS_OPEN", temp_analyzed)
+        processed, _, _ = track_balance("TEST_POS_OPEN", temp_analyzed)
 
         # Verify position is open
         assert len(processed) > 0
@@ -71,7 +71,7 @@ def test_scenario_forward_split():
         temp_analyzed = f.name
 
     try:
-        processed = track_balance("TEST_FW_SPLIT", temp_analyzed, test_splits)
+        processed, _, _ = track_balance("TEST_FW_SPLIT", temp_analyzed, test_splits)
 
         # Verify position is closed after split
         assert len(processed) > 0
@@ -106,7 +106,7 @@ def test_scenario_backward_split():
         temp_analyzed = f.name
 
     try:
-        processed = track_balance("TEST_BW_SPLIT", temp_analyzed, test_splits)
+        processed, _, _ = track_balance("TEST_BW_SPLIT", temp_analyzed, test_splits)
 
         # Verify position is closed after split
         assert len(processed) > 0
@@ -139,7 +139,7 @@ def test_scenario_short_only():
         temp_analyzed = f.name
 
     try:
-        processed = track_balance("TEST_SHORT", temp_analyzed)
+        processed, _, _ = track_balance("TEST_SHORT", temp_analyzed)
 
         # Verify position is closed
         assert len(processed) > 0
@@ -175,7 +175,7 @@ def test_scenario_partial_fill():
         temp_analyzed = f.name
 
     try:
-        processed = track_balance("TEST_PARTIAL_FILL", temp_analyzed)
+        processed, _, _ = track_balance("TEST_PARTIAL_FILL", temp_analyzed)
 
         # Should process events successfully
         assert len(processed) > 0
@@ -205,7 +205,7 @@ def test_scenario_reverse_long():
         temp_analyzed = f.name
 
     try:
-        processed = track_balance("TEST_REVERSE_LONG", temp_analyzed)
+        processed, _, _ = track_balance("TEST_REVERSE_LONG", temp_analyzed)
 
         # Should have split events (close long, open short)
         assert len(processed) >= 3
@@ -242,7 +242,7 @@ def test_scenario_reverse_short():
         temp_analyzed = f.name
 
     try:
-        processed = track_balance("TEST_REVERSE_SHORT", temp_analyzed)
+        processed, _, _ = track_balance("TEST_REVERSE_SHORT", temp_analyzed)
 
         # Should have split events (close short, open long)
         assert len(processed) >= 3

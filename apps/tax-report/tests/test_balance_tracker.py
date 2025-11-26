@@ -46,7 +46,7 @@ def test_long_to_short_conversion():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("QQQ", f.name)
+        processed, _, _ = track_balance("QQQ", f.name)
 
         # Should have 3 events: open long, close long, open short
         assert len(processed) == 3, f"Expected 3 events, got {len(processed)}"
@@ -100,7 +100,7 @@ def test_short_to_long_conversion():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("QQQ", f.name)
+        processed, _, _ = track_balance("QQQ", f.name)
 
         # Should have 3 events: open short, close short, open long
         assert len(processed) == 3, f"Expected 3 events, got {len(processed)}"
@@ -162,7 +162,7 @@ def test_quantity_verification():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("QQQ", f.name)
+        processed, _, _ = track_balance("QQQ", f.name)
 
         # Verify quantities
         total_bought = sum(e["qty"] for e in processed if e["side"] == "buy")
@@ -198,7 +198,7 @@ def test_cum_qty_handling():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("QQQ", f.name)
+        processed, _, _ = track_balance("QQQ", f.name)
 
         # Should have 1 event with qty=20
         assert len(processed) == 1
@@ -245,7 +245,7 @@ def test_pos_open():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("TEST_POS_OPEN", f.name)
+        processed, _, _ = track_balance("TEST_POS_OPEN", f.name)
 
         # Should have 3 events
         assert len(processed) == 3
@@ -315,7 +315,7 @@ def test_forward_split():
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as s:
             create_test_events_file(splits, s.name)
 
-            processed = track_balance("TEST_FW_SPLIT", f.name, s.name)
+            processed, _, _ = track_balance("TEST_FW_SPLIT", f.name, s.name)
 
             # Should have split event + 2 trading events (or 3 if split creates separate event)
             assert len(processed) >= 2
@@ -388,7 +388,7 @@ def test_backward_split():
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as s:
             create_test_events_file(splits, s.name)
 
-            processed = track_balance("TEST_BW_SPLIT", f.name, s.name)
+            processed, _, _ = track_balance("TEST_BW_SPLIT", f.name, s.name)
 
             # Should have split event + 2 trading events
             assert len(processed) >= 2
@@ -438,7 +438,7 @@ def test_short_only():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("TEST_SHORT", f.name)
+        processed, _, _ = track_balance("TEST_SHORT", f.name)
 
         # Should have 3 events
         assert len(processed) == 3
@@ -482,7 +482,7 @@ def test_reverse_long():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("TEST_REVERSE_LONG", f.name)
+        processed, _, _ = track_balance("TEST_REVERSE_LONG", f.name)
 
         # Should have 3 events: open long, close long, open short
         assert len(processed) == 3
@@ -531,7 +531,7 @@ def test_reverse_short():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         create_test_events_file(events, f.name)
 
-        processed = track_balance("TEST_REVERSE_SHORT", f.name)
+        processed, _, _ = track_balance("TEST_REVERSE_SHORT", f.name)
 
         # Should have 3 events: open short, close short, open long
         assert len(processed) == 3
@@ -553,6 +553,115 @@ def test_reverse_short():
     print("✓ test_reverse_short passed")
 
 
+def test_symbol_name_change():
+    """Test symbol name change handling (TEST_SYM_CNG -> TEST_SYM_CNG1)."""
+    # Test with old symbol name (TEST_SYM_CNG)
+    events = [
+        {
+            "id": "20240801100000001::test-sym-cng-1",
+            "symbol": "TEST_SYM_CNG",
+            "side": "buy",
+            "qty": "10",
+            "price": "100.00",
+            "transaction_time": "2024-08-01T10:00:00Z",
+            "order_id": "order-sym-cng-1",
+        },
+        {
+            "id": "20240801120000002::test-sym-cng1-1",
+            "symbol": "TEST_SYM_CNG1",
+            "side": "sell",
+            "qty": "10",
+            "price": "110.00",
+            "transaction_time": "2024-08-01T12:00:00Z",
+            "order_id": "order-sym-cng1-1",
+        },
+    ]
+
+    name_changes = [
+        {
+            "id": "20240801110000000::test-name-change-1",
+            "activity_type": "NC",
+            "activity_sub_type": "SNC",
+            "date": "2024-08-01",
+            "created_at": "2024-08-01T11:00:00Z",
+            "net_amount": "0",
+            "description": "Name Change from TEST_SYM_CNG to TEST_SYM_CNG1",
+            "symbol": "TEST_SYM_CNG1",
+            "qty": "10",
+            "price": "100.00",
+            "status": "executed",
+        },
+        {
+            "id": "20240801110000001::test-name-change-2",
+            "activity_type": "NC",
+            "activity_sub_type": "SNC",
+            "date": "2024-08-01",
+            "created_at": "2024-08-01T11:00:01Z",
+            "net_amount": "0",
+            "description": "Name Change from TEST_SYM_CNG to TEST_SYM_CNG1",
+            "symbol": "TEST_SYM_CNG",
+            "qty": "-10",
+            "price": "100.00",
+            "status": "executed",
+        },
+    ]
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        create_test_events_file(events, f.name)
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as n:
+            create_test_events_file(name_changes, n.name)
+
+            # Test with old symbol name
+            processed, latest_symbol, name_change_history = track_balance(
+                "TEST_SYM_CNG", f.name, None, n.name
+            )
+
+            # Should have 2 events (buy and sell)
+            assert len(processed) == 2, f"Expected 2 events, got {len(processed)}"
+
+            # Latest symbol should be TEST_SYM_CNG1
+            assert latest_symbol == "TEST_SYM_CNG1", (
+                f"Expected latest symbol TEST_SYM_CNG1, got {latest_symbol}"
+            )
+
+            # Should have name change history
+            assert len(name_change_history) == 1, (
+                f"Expected 1 name change, got {len(name_change_history)}"
+            )
+            assert name_change_history[0]["from"] == "TEST_SYM_CNG"
+            assert name_change_history[0]["to"] == "TEST_SYM_CNG1"
+
+            # First event: buy with old symbol (normalized to new)
+            assert processed[0]["side"] == "buy"
+            assert processed[0]["qty"] == 10.0
+            assert processed[0]["position_after"] == 10.0
+            assert processed[0]["status"] == "opened"
+
+            # Second event: sell with new symbol
+            assert processed[1]["side"] == "sell"
+            assert processed[1]["qty"] == 10.0
+            assert processed[1]["position_after"] == 0.0
+            assert processed[1]["status"] == "closed"
+            assert processed[1]["profit"] is not None
+            assert processed[1]["profit"] == 100.0  # (110 - 100) * 10
+
+            # Test with new symbol name (should work the same)
+            processed2, latest_symbol2, name_change_history2 = track_balance(
+                "TEST_SYM_CNG1", f.name, None, n.name
+            )
+
+            # Should have same results
+            assert len(processed2) == 2
+            assert latest_symbol2 == "TEST_SYM_CNG1"
+            assert len(name_change_history2) == 1
+
+            Path(f.name).unlink()
+            Path(n.name).unlink()
+
+    print("✓ test_symbol_name_change passed")
+
+
 if __name__ == "__main__":
     print("Running tests for balance_tracker.py...\n")
     test_long_to_short_conversion()
@@ -565,4 +674,5 @@ if __name__ == "__main__":
     test_short_only()
     test_reverse_long()
     test_reverse_short()
+    test_symbol_name_change()
     print("\n✅ All tests passed!")
