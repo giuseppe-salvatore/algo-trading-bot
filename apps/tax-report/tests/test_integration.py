@@ -102,7 +102,7 @@ def test_full_pipeline_with_partial_fills():
             temp_analyzed = f2.name
 
         try:
-            processed = track_balance("QQQ", temp_analyzed)
+            processed, _, _ = track_balance("QQQ", temp_analyzed)
 
             # Should have 1 event with 20 shares
             assert len(processed) == 1
@@ -167,7 +167,7 @@ def test_quantity_consistency_check():
             temp_analyzed = f2.name
 
         try:
-            processed = track_balance("QQQ", temp_analyzed)
+            processed, _, _ = track_balance("QQQ", temp_analyzed)
 
             # Verify quantities in processed events match
             processed_bought = sum(e["qty"] for e in processed if e["side"] == "buy")

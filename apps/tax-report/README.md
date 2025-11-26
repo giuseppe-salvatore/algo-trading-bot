@@ -18,6 +18,8 @@ This project contains two scripts for processing Alpaca trading activity data:
 - **Position Tracking**: Maintains running position balance with average cost basis
 - **Profit/Loss Calculation**: Calculates profit/loss on every sale (partial or full) using Average Cost Basis method
 - **Discrepancy Detection**: Warns when events with the same `order_id` have different prices or transaction times
+- **Stock Splits**: Automatically applies stock splits based on splits.json file
+- **Symbol Name Changes**: Automatically consolidates events from symbols that have changed names (e.g., MF → MFLTF → MFLTY)
 
 ## Usage
 
@@ -61,11 +63,12 @@ Or with custom input/output files:
 just balance SYMBOL=AAPL
 ```
 
-Or with custom input/splits/output files:
+Or with custom input/splits/name-changes/output files:
 ```bash
 ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/balance_tracker.py AAPL \
     --input path/to/analyzed.json \
     --splits path/to/splits.json \
+    --name-changes path/to/name_changes.json \
     --output path/to/report.txt
 ```
 
@@ -76,10 +79,11 @@ Or with custom input/splits/output files:
 - `--output` / `-o`: Override output file path (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
 
 **balance_tracker.py:**
-- `SYMBOL` (required): Stock symbol to track
+- `SYMBOL` (required): Stock symbol to track (can be old or new name if symbol has changed)
 - `--input` / `-i`: Override input analyzed events file (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
 - `--splits` / `-s`: Override splits file path (default: `data/trading/alpaca/live/splits.json`)
-- `--output` / `-o`: Override output report file (default: `data/trading/alpaca/live/reports/{SYMBOL}_balance_report.txt`)
+- `--name-changes` / `-n`: Override name_changes.json file path (default: `data/trading/alpaca/live/name_changes.json`)
+- `--output` / `-o`: Override output report file (default: `data/trading/alpaca/live/reports/{LATEST_SYMBOL}_balance_report.txt`)
 
 ### Output
 
@@ -179,3 +183,9 @@ This system uses the **Average Cost Basis** method for calculating profit/loss. 
 - Scripts automatically resolve paths relative to the project root, so they work regardless of where they're executed from
 - Profit/loss is calculated on every sale (partial or full), which is correct for tax reporting
 - Stock splits are automatically applied based on splits.json file (defaults to same directory as input file)
+- **Symbol name changes**: When a symbol changes names (e.g., MF → MFLTF → MFLTY), the script automatically:
+  - Accepts either the old or new symbol name as input
+  - Consolidates events from all related symbol names
+  - Generates the report using the latest symbol name
+  - Creates a symlink from the old symbol name to the latest report (if input was old name)
+  - Displays name change history in the report header

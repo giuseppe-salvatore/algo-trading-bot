@@ -113,6 +113,26 @@ The test data includes the following test stocks, each designed to exercise a sp
 
 ---
 
+### TEST_SYM_CNG / TEST_SYM_CNG1
+**Scenario**: Symbol name change with position tracking across name change
+
+**Events**:
+- Buy 10 shares of TEST_SYM_CNG at $100
+- Symbol name changes from TEST_SYM_CNG to TEST_SYM_CNG1
+- Sell 10 shares of TEST_SYM_CNG1 at $110
+
+**Expected Result**: Position tracking continues correctly across name change; events from both symbols are consolidated; report uses latest symbol name (TEST_SYM_CNG1)
+
+**Purpose**: Tests symbol name change handling where:
+- Script accepts either old (TEST_SYM_CNG) or new (TEST_SYM_CNG1) symbol name as input
+- Events from both symbol names are automatically consolidated
+- Report is generated using the latest symbol name
+- Symlink is created when using old symbol name as input
+
+**Note**: Requires `name_changes.json` for the name change event.
+
+---
+
 ## File Structure
 
 ### taxable_activities.json
@@ -159,6 +179,26 @@ Split events follow this format with REMOVE and ADD pairs:
     "description": "REMOVE, From QTY:10, To QTY:30, Position Value:1000.00",
     "symbol": "TEST_FW_SPLIT",
     "qty": "-10",
+    "price": "100.00",
+    "status": "executed"
+}
+```
+
+### name_changes.json
+
+Name change events follow this format with pairs of entries (one for old symbol, one for new):
+
+```json
+{
+    "id": "name-change-id-1",
+    "activity_type": "NC",
+    "activity_sub_type": "SNC",
+    "date": "2024-08-01",
+    "created_at": "2024-08-01T11:00:00Z",
+    "net_amount": "0",
+    "description": "Name Change from TEST_SYM_CNG to TEST_SYM_CNG1",
+    "symbol": "TEST_SYM_CNG1",
+    "qty": "10",
     "price": "100.00",
     "status": "executed"
 }
@@ -224,4 +264,5 @@ You can also use the scripts directly with test data:
 - Prices and quantities are realistic but arbitrary
 - Test data is version-controlled (unlike live data which is git-ignored)
 - When adding new test scenarios, update this README to document them
+- The `name_changes.json` file contains symbol name change events that allow testing the name change consolidation feature
 

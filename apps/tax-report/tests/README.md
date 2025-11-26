@@ -29,6 +29,7 @@ for test in apps/tax-report/tests/test_*.py; do python3 "$test"; done
 - Tests SHORT->LONG position conversion (splits into close/open events)
 - Tests quantity verification across events
 - Tests that `cum_qty` values are correctly handled
+- Tests symbol name change handling (consolidates events from old and new symbol names)
 
 ### test_integration.py
 - Tests the full pipeline from raw events -> analyzed -> balance tracking
