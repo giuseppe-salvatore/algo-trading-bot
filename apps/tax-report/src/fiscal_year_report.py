@@ -12,7 +12,7 @@ import csv
 import json
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,6 @@ from analyze_events import analyze_events
 from balance_tracker import (
     apply_splits,
     format_currency,
-    format_datetime,
     load_name_changes,
     load_splits,
     resolve_symbol,
@@ -45,11 +44,15 @@ def parse_fy_date_range(fy_string: str) -> tuple[datetime, datetime]:
     """
     # Parse format: "YYYY-YY" (e.g., "2025-26")
     if "-" not in fy_string:
-        raise ValueError(f"Invalid FY format: {fy_string}. Expected format: YYYY-YY (e.g., 2025-26)")
+        raise ValueError(
+            f"Invalid FY format: {fy_string}. Expected format: YYYY-YY (e.g., 2025-26)"
+        )
 
     parts = fy_string.split("-")
     if len(parts) != 2:
-        raise ValueError(f"Invalid FY format: {fy_string}. Expected format: YYYY-YY (e.g., 2025-26)")
+        raise ValueError(
+            f"Invalid FY format: {fy_string}. Expected format: YYYY-YY (e.g., 2025-26)"
+        )
 
     try:
         start_year = int(parts[0])
@@ -65,15 +68,15 @@ def parse_fy_date_range(fy_string: str) -> tuple[datetime, datetime]:
 
         # UK FY: April 6, YYYY to April 5, YYYY+1
         # Make timezone-aware (UTC) to match transaction times
-        start_date = datetime(start_year, 4, 6, 0, 0, 0, tzinfo=timezone.utc)
-        end_date = datetime(start_year + 1, 4, 5, 23, 59, 59, 999999, tzinfo=timezone.utc)
+        start_date = datetime(start_year, 4, 6, 0, 0, 0, tzinfo=UTC)
+        end_date = datetime(start_year + 1, 4, 5, 23, 59, 59, 999999, tzinfo=UTC)
 
         return start_date, end_date
 
     except ValueError as e:
         if "Invalid FY format" in str(e):
             raise
-        raise ValueError(f"Invalid FY format: {fy_string}. {e}")
+        raise ValueError(f"Invalid FY format: {fy_string}. {e}") from e
 
 
 def is_event_in_fy_range(
@@ -197,9 +200,7 @@ def calculate_fy_gains_per_symbol(
 
             # Extract date from transaction_time
             event_date = (
-                transaction_time.split("T")[0]
-                if "T" in transaction_time
-                else transaction_time[:10]
+                transaction_time.split("T")[0] if "T" in transaction_time else transaction_time[:10]
             )
 
             # Apply any splits that occurred between last event and this event
@@ -217,8 +218,6 @@ def calculate_fy_gains_per_symbol(
             last_processed_date = event_date
 
             # Track previous state (after split adjustments)
-            prev_position = position
-            prev_avg_cost = avg_cost
             prev_cost_basis = cost_basis
 
             # Initialize profit
@@ -373,11 +372,14 @@ def generate_text_report(
         # Header
         f.write("=" * 80 + "\n")
         if fy_string:
-            f.write(f"UK Financial Year Capital Gains Report\n")
-            f.write(f"Financial Year: {fy_string} ({fy_start.strftime('%B %d, %Y')} to {fy_end.strftime('%B %d, %Y')})\n")
+            f.write("UK Financial Year Capital Gains Report\n")
+            f.write(
+                f"Financial Year: {fy_string} "
+                f"({fy_start.strftime('%B %d, %Y')} to {fy_end.strftime('%B %d, %Y')})\n"
+            )
         else:
-            f.write(f"All-Time Capital Gains Report\n")
-            f.write(f"Period: All trading events from day 0\n")
+            f.write("All-Time Capital Gains Report\n")
+            f.write("Period: All trading events from day 0\n")
         f.write("=" * 80 + "\n\n")
 
         # Summary
@@ -437,8 +439,7 @@ def generate_json_report(
     report_data: dict[str, Any] = {
         "total_profit_loss": sum(gains_by_symbol.values()),
         "gains_by_symbol": [
-            {"symbol": symbol, "profit_loss": profit}
-            for symbol, profit in sorted_gains
+            {"symbol": symbol, "profit_loss": profit} for symbol, profit in sorted_gains
         ],
         "metadata": {
             "generated_at": datetime.now().isoformat(),
@@ -493,7 +494,10 @@ def main():
         type=str,
         nargs="?",
         default=None,
-        help='UK Financial Year (e.g., "2025-26" for April 6, 2025 to April 5, 2026). If omitted, performs all-time analysis.',
+        help=(
+            'UK Financial Year (e.g., "2025-26" for April 6, 2025 to April 5, 2026). '
+            "If omitted, performs all-time analysis."
+        ),
     )
     parser.add_argument(
         "--input",
@@ -607,12 +611,12 @@ def main():
 
     # Print summary
     total_profit = sum(gains_by_symbol.values())
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"Report Summary for {report_title}:")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
     print(f"Total Profit/Loss: {format_currency(total_profit)}")
     print(f"Number of Symbols: {len(gains_by_symbol)}")
-    print(f"Reports generated:")
+    print("Reports generated:")
     print(f"  - {text_file}")
     print(f"  - {json_file}")
     print(f"  - {csv_file}")
@@ -620,4 +624,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
