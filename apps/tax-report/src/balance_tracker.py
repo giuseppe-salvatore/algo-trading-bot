@@ -13,7 +13,8 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
+from collections import defaultdict
 
 
 def format_datetime(iso_timestamp: str) -> str:
@@ -35,13 +36,220 @@ def format_number(value: float, decimals: int = 4) -> str:
     return f"{value:,.{decimals}f}"
 
 
-def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
+def load_splits(splits_file: str) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Load splits from JSON file and organize by symbol and date.
+
+    Args:
+        splits_file: Path to splits.json file
+
+    Returns:
+        Dictionary mapping symbol -> list of splits sorted by date
+    """
+    try:
+        with open(splits_file, "r") as f:
+            all_splits = json.load(f)
+    except FileNotFoundError:
+        print(
+            f"Warning: Splits file {splits_file} not found. Continuing without split adjustments."
+        )
+        return {}
+
+    # Group splits by symbol and date to avoid duplicates
+    splits_by_symbol = defaultdict(list)
+    processed_splits = set()  # Track (symbol, date) pairs we've already processed
+
+    for split in all_splits:
+        symbol = split.get("symbol", "").upper()
+        if not symbol:
+            continue
+
+        split_date = split.get("date", "")
+        split_key = (symbol, split_date)
+
+        # Skip if we've already processed this split
+        if split_key in processed_splits:
+            continue
+
+        # Parse the description to extract from_qty and to_qty
+        description = split.get("description", "")
+
+        # Extract quantities from description
+        # Format: "ADD, From QTY:-25, To QTY:1.666666667, Position Value:209.35"
+        # or "REMOVE, From QTY:-25, To QTY:1.666666667, Position Value:209.35"
+        from_qty = None
+        to_qty = None
+
+        if "From QTY:" in description and "To QTY:" in description:
+            try:
+                # Extract from_qty
+                from_start = description.find("From QTY:") + len("From QTY:")
+                from_end = description.find(",", from_start)
+                if from_end == -1:
+                    from_end = description.find(" ", from_start)
+                from_qty_str = description[from_start:from_end].strip()
+                from_qty = float(from_qty_str)
+
+                # Extract to_qty
+                to_start = description.find("To QTY:") + len("To QTY:")
+                to_end = description.find(",", to_start)
+                if to_end == -1:
+                    to_end = len(description)
+                to_qty_str = description[to_start:to_end].strip()
+                to_qty = float(to_qty_str)
+            except (ValueError, IndexError):
+                # Fallback: find corresponding REMOVE/ADD pair
+                if "REMOVE" in description:
+                    from_qty = abs(float(split.get("qty", 0)))
+                    # Try to find corresponding ADD entry
+                    for other_split in all_splits:
+                        if (
+                            other_split.get("symbol", "").upper() == symbol
+                            and other_split.get("date") == split_date
+                            and "ADD" in other_split.get("description", "")
+                        ):
+                            to_qty = float(other_split.get("qty", 0))
+                            break
+                elif "ADD" in description:
+                    to_qty = float(split.get("qty", 0))
+                    # Try to find corresponding REMOVE entry
+                    for other_split in all_splits:
+                        if (
+                            other_split.get("symbol", "").upper() == symbol
+                            and other_split.get("date") == split_date
+                            and "REMOVE" in other_split.get("description", "")
+                        ):
+                            from_qty = abs(float(other_split.get("qty", 0)))
+                            break
+
+        # If we couldn't parse, skip this split
+        if from_qty is None or to_qty is None or abs(from_qty) == 0:
+            continue
+
+        # Calculate split ratio (how many new shares you get per old share)
+        # For a forward split (e.g., 3:1): from_qty=1, to_qty=3, ratio=3.0 (multiply position by 3)
+        # For a reverse split (e.g., 1:3): from_qty=3, to_qty=1, ratio=0.333 (multiply position by 0.333)
+        # The description format: "From QTY:X, To QTY:Y" means X old shares become Y new shares
+        # So: ratio = Y / X (new shares per old share)
+        # Use absolute values to handle negative quantities in descriptions
+        from_qty_abs = abs(from_qty)
+        to_qty_abs = abs(to_qty)
+        split_ratio = to_qty_abs / from_qty_abs if from_qty_abs != 0 else 1.0
+
+        # Only process ADD entries (or if we have both quantities)
+        if "ADD" in description or (from_qty and to_qty):
+            splits_by_symbol[symbol].append(
+                {
+                    "date": split_date,
+                    "from_qty": abs(from_qty),
+                    "to_qty": abs(to_qty),
+                    "ratio": split_ratio,
+                }
+            )
+            processed_splits.add(split_key)
+
+    # Sort splits by date for each symbol
+    for symbol in splits_by_symbol:
+        splits_by_symbol[symbol].sort(key=lambda x: x["date"])
+
+    return dict(splits_by_symbol)
+
+
+def apply_splits(
+    position: float,
+    cost_basis: float,
+    avg_cost: float,
+    symbol: str,
+    current_date: str,
+    splits_by_symbol: Dict[str, List[Dict[str, Any]]],
+    last_processed_date: Optional[str] = None,
+) -> Tuple[float, float, float, List[Dict[str, Any]]]:
+    """
+    Apply any splits that occurred between last_processed_date and current_date.
+
+    Args:
+        position: Current position quantity
+        cost_basis: Current cost basis
+        avg_cost: Current average cost per share
+        symbol: Stock symbol
+        current_date: Current event date
+        splits_by_symbol: Dictionary of splits by symbol
+        last_processed_date: Date of last processed event (None if first event)
+
+    Returns:
+        Tuple of (adjusted_position, adjusted_cost_basis, adjusted_avg_cost, applied_splits)
+        where applied_splits is a list of split information dictionaries
+    """
+    applied_splits = []
+
+    if position == 0:
+        # No position, no split to apply
+        return position, cost_basis, avg_cost, applied_splits
+
+    symbol_upper = symbol.upper()
+    if symbol_upper not in splits_by_symbol:
+        return position, cost_basis, avg_cost, applied_splits
+
+    splits = splits_by_symbol[symbol_upper]
+
+    # Find splits that occurred between last_processed_date and current_date
+    for split in splits:
+        split_date = split["date"]
+        should_apply = False
+
+        # Check if split occurred in the relevant time period
+        if last_processed_date is None:
+            # First event - check if split occurred before or on this date
+            if split_date <= current_date:
+                should_apply = True
+        else:
+            # Check if split occurred between last event and current event
+            if last_processed_date < split_date <= current_date:
+                should_apply = True
+
+        if should_apply:
+            # Store split info before applying
+            prev_position = position
+            prev_avg_cost = avg_cost
+            ratio = split["ratio"]
+            from_qty = split["from_qty"]
+            to_qty = split["to_qty"]
+
+            # Apply this split
+            position = position * ratio
+            # Cost basis stays the same (total value doesn't change)
+            # Average cost changes: new_avg_cost = old_avg_cost / ratio
+            if ratio > 0:
+                avg_cost = avg_cost / ratio
+
+            # Store split information
+            applied_splits.append(
+                {
+                    "date": split_date,
+                    "from_qty": from_qty,
+                    "to_qty": to_qty,
+                    "ratio": ratio,
+                    "prev_position": prev_position,
+                    "prev_avg_cost": prev_avg_cost,
+                    "new_position": position,
+                    "new_avg_cost": avg_cost,
+                    "cost_basis": cost_basis,  # Cost basis doesn't change
+                }
+            )
+
+    return position, cost_basis, avg_cost, applied_splits
+
+
+def track_balance(
+    symbol: str, input_file: str, splits_file: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
     Track balance for a specific symbol from analyzed events.
 
     Args:
         symbol: Stock symbol to track
         input_file: Path to analyzed events JSON file
+        splits_file: Optional path to splits.json file. If None, will look in data directory.
 
     Returns:
         List of processed events with balance information
@@ -60,11 +268,23 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
 
     print(f"Found {len(symbol_events)} events for symbol {symbol}")
 
+    # Load splits
+    if splits_file is None:
+        # Try to find splits.json in the data directory (same as input_file)
+        input_path = Path(input_file)
+        # input_file is typically in data/ directory, so splits.json should be in the same directory
+        splits_file = input_path.parent / "splits.json"
+
+    splits_by_symbol = load_splits(str(splits_file))
+    if splits_by_symbol:
+        print(f"Loaded splits for {len(splits_by_symbol)} symbols")
+
     # Track position
     position = 0.0  # Current position quantity
     cost_basis = 0.0  # Total cost basis
     avg_cost = 0.0  # Average cost per share
     accumulated_gains = 0.0  # Running total of profits from closed positions
+    last_processed_date: Optional[str] = None
 
     processed_events = []
 
@@ -74,10 +294,54 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
         price = float(event.get("price", 0))
         transaction_time = event.get("transaction_time", "")
 
-        # Determine previous position state
+        # Extract date from transaction_time (format: YYYY-MM-DDTHH:MM:SSZ)
+        event_date = (
+            transaction_time.split("T")[0] if "T" in transaction_time else transaction_time[:10]
+        )
+
+        # Apply any splits that occurred between last event and this event
+        position, cost_basis, avg_cost, applied_splits = apply_splits(
+            position,
+            cost_basis,
+            avg_cost,
+            symbol,
+            event_date,
+            splits_by_symbol,
+            last_processed_date,
+        )
+
+        # Add split events to processed_events if any splits were applied
+        for split_info in applied_splits:
+            processed_events.append(
+                {
+                    "event": None,  # No actual trading event for splits
+                    "side": "SPLIT",
+                    "qty": 0,  # Not applicable for splits
+                    "price": 0,  # Not applicable for splits
+                    "event_cost_basis": 0,  # Not applicable for splits
+                    "position_after": split_info["new_position"],
+                    "cost_basis_after": split_info["cost_basis"],
+                    "avg_cost_after": split_info["new_avg_cost"],
+                    "status": "split",
+                    "status_icon": "🔀",
+                    "transaction_time": f"{split_info['date']}T00:00:00Z",  # Use split date
+                    "prev_position": split_info["prev_position"],
+                    "prev_avg_cost": split_info["prev_avg_cost"],
+                    "prev_cost_basis": split_info["cost_basis"],  # Cost basis doesn't change
+                    "profit": None,
+                    "accumulated_gains": accumulated_gains,
+                    "is_split_event": True,
+                    "split_info": split_info,  # Store full split information
+                }
+            )
+
+        # Determine previous position state (after split adjustments)
         prev_position = position
         prev_avg_cost = avg_cost
         prev_cost_basis = cost_basis
+
+        # Update last processed date
+        last_processed_date = event_date
 
         # Initialize profit for this transaction (will be calculated during processing)
         profit = None
@@ -236,9 +500,6 @@ def track_balance(symbol: str, input_file: str) -> List[Dict[str, Any]]:
                     avg_cost = cost_basis / position if position > 0 else 0
                     status = "updated"
                     status_icon = "🔄"
-
-                    # Update accumulated gains for partial sale
-                    accumulated_gains += profit
 
                     # Update accumulated gains for partial sale
                     accumulated_gains += profit
@@ -442,6 +703,95 @@ def generate_report(symbol: str, processed_events: List[Dict[str, Any]], output_
 
         # Process each event
         for pe in processed_events:
+            # Check if this is a split event
+            if pe.get("is_split_event") and pe.get("split_info"):
+                split_info = pe["split_info"]
+                date_time = format_datetime(pe["transaction_time"])
+                prev_position = split_info["prev_position"]
+                new_position = split_info["new_position"]
+                prev_avg_cost = split_info["prev_avg_cost"]
+                new_avg_cost = split_info["new_avg_cost"]
+                from_qty = split_info["from_qty"]
+                to_qty = split_info["to_qty"]
+                ratio = split_info["ratio"]
+                cost_basis = split_info["cost_basis"]
+
+                # Determine split type and format description
+                # Calculate the actual split ratio (e.g., 2:1, 3:1, 1:2, etc.)
+                # Find the greatest common divisor to simplify the ratio
+                def gcd(a, b):
+                    while b:
+                        a, b = b, a % b
+                    return a
+
+                # Normalize to get the simplest ratio
+                # For forward splits: from_qty shares become to_qty shares (e.g., 1 share becomes 3 shares = 1:3)
+                # For reverse splits: from_qty shares become to_qty shares (e.g., 3 shares become 1 share = 3:1)
+                if ratio < 1.0:
+                    split_type = "REVERSE SPLIT"
+                    # Reverse split: more shares become fewer shares
+                    # Example: 25 shares -> 1.666667 shares = 15:1 reverse split
+                    # Calculate as from_qty/to_qty to get the reverse ratio
+                    if from_qty > 0 and to_qty > 0:
+                        # Try to find a common multiplier to get integers
+                        multiplier = 1
+                        while (
+                            from_qty * multiplier < 1000
+                            and to_qty * multiplier < 1000
+                            and abs(from_qty * multiplier - round(from_qty * multiplier)) > 0.001
+                        ):
+                            multiplier *= 10
+                        from_int = int(round(from_qty * multiplier))
+                        to_int = int(round(to_qty * multiplier))
+                        if from_int > 0 and to_int > 0:
+                            common = gcd(from_int, to_int)
+                            from_int //= common
+                            to_int //= common
+                            split_desc = f"{from_int}:{to_int}"
+                        else:
+                            split_desc = f"{from_qty:.6f}:{to_qty:.6f}".rstrip("0").rstrip(".")
+                    else:
+                        split_desc = f"{from_qty:.6f}:{to_qty:.6f}".rstrip("0").rstrip(".")
+                else:
+                    split_type = "FORWARD SPLIT"
+                    # Forward split: fewer shares become more shares
+                    # Example: 0.1 shares -> 1 share = 1:10 forward split
+                    if from_qty > 0 and to_qty > 0:
+                        # Try to find a common multiplier to get integers
+                        multiplier = 1
+                        while (
+                            from_qty * multiplier < 1000
+                            and to_qty * multiplier < 1000
+                            and abs(from_qty * multiplier - round(from_qty * multiplier)) > 0.001
+                        ):
+                            multiplier *= 10
+                        from_int = int(round(from_qty * multiplier))
+                        to_int = int(round(to_qty * multiplier))
+                        if from_int > 0 and to_int > 0:
+                            common = gcd(from_int, to_int)
+                            from_int //= common
+                            to_int //= common
+                            split_desc = f"{from_int}:{to_int}"
+                        else:
+                            split_desc = f"{from_qty:.6f}:{to_qty:.6f}".rstrip("0").rstrip(".")
+                    else:
+                        split_desc = f"{from_qty:.6f}:{to_qty:.6f}".rstrip("0").rstrip(".")
+
+                # Write split event line
+                f.write("\n")
+                f.write(">>>>>>>>>>> SPLIT EVENT OCCURRED ")
+                f.write(f"Date: {date_time}, Type: {split_type} ({split_desc}), ")
+                f.write(f"Ratio: {ratio:.6f}, ")
+                f.write(
+                    f"Position: {format_number(prev_position)} -> {format_number(new_position)}, "
+                )
+                f.write(
+                    f"Avg Cost: {format_currency(prev_avg_cost)} -> {format_currency(new_avg_cost)}, "
+                )
+                f.write(f"Cost Basis: {format_currency(cost_basis)} (unchanged)\n")
+                f.write("\n")
+                continue
+
             event = pe["event"]
             side = pe["side"].upper()
             qty = pe["qty"]
