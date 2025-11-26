@@ -78,8 +78,18 @@ def reconcile_events(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             return last_event
 
     # Different prices - reconcile using weighted average
-    # Get final cum_qty (should be from the last event)
-    final_cum_qty = float(sorted_events[-1].get("cum_qty", 0))
+    # Get final cum_qty (should be the MAXIMUM cum_qty from all events, not just the last)
+    # The last event might not have the highest cum_qty if events are out of order
+    all_cum_qtys = [
+        float(e.get("cum_qty", e.get("qty", 0)))
+        for e in sorted_events
+        if e.get("cum_qty") or e.get("qty")
+    ]
+    final_cum_qty = (
+        max(all_cum_qtys)
+        if all_cum_qtys
+        else float(sorted_events[-1].get("cum_qty", sorted_events[-1].get("qty", 0)))
+    )
 
     # Calculate weighted average price
     total_value = sum(price * qty for price, qty in zip(prices, qtys))
