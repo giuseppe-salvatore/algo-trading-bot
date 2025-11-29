@@ -21,15 +21,19 @@ from datetime import date, timedelta
 from pathlib import Path
 
 # Import from exchange_rate package
+# Files are directly in packages/exchange_rate/src/
 # In PDM workspace, packages are available via workspace
 try:
+    # Try importing as a package (if installed via PDM workspace)
     from exchange_rate import get_exchange_rates
 except ImportError:
-    # Fallback: add project root to path if not in workspace context
-    # When package-dir = "src", add src directory to path
+    # Fallback: add src directory to path and import modules directly
     project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root / "packages" / "exchange_rate" / "src"))
-    from exchange_rate import get_exchange_rates
+    src_path = project_root / "packages" / "exchange_rate" / "src"
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+    # Import from the modules directly in src/
+    from exchange_rate_proxy import get_exchange_rates
 
 
 def parse_date(date_str: str) -> date:
@@ -116,20 +120,55 @@ def generate_date_range(start_date: date, end_date: date) -> list[date]:
     return dates
 
 
-def format_rate_output(rate_data: dict) -> str:
+def format_table(rates: list[dict]) -> str:
     """
-    Format rate data for output.
+    Format rates as an aligned table.
 
     Args:
-        rate_data: Rate dictionary from get_exchange_rates
+        rates: List of rate dictionaries from get_exchange_rates
 
     Returns:
-        Formatted string
+        Formatted table string
     """
-    return (
-        f"{rate_data['date']} | {rate_data['currency_pair']} | "
-        f"{rate_data['rate']:.6f} | {rate_data['source']}"
+    if not rates:
+        return ""
+
+    # Calculate column widths
+    date_width = max(len("Date"), max(len(str(rate["date"])) for rate in rates))
+    currency_width = max(len("Currency Pair"), max(len(rate["currency_pair"]) for rate in rates))
+    rate_width = max(
+        len("Rate"),
+        max(len(f"{rate['rate']:.6f}") for rate in rates),
     )
+    source_width = max(len("Source"), max(len(rate["source"]) for rate in rates))
+
+    # Format header
+    header = (
+        f"{'Date':<{date_width}} | "
+        f"{'Currency Pair':<{currency_width}} | "
+        f"{'Rate':>{rate_width}} | "
+        f"{'Source':<{source_width}}"
+    )
+
+    # Format separator
+    separator = "-" * len(header)
+
+    # Format rows
+    rows = []
+    for rate in rates:
+        date_str = str(rate["date"])
+        currency_str = rate["currency_pair"]
+        rate_str = f"{rate['rate']:.6f}"
+        source_str = rate["source"]
+        row = (
+            f"{date_str:<{date_width}} | "
+            f"{currency_str:<{currency_width}} | "
+            f"{rate_str:>{rate_width}} | "
+            f"{source_str:<{source_width}}"
+        )
+        rows.append(row)
+
+    return "\n".join([header, separator] + rows)
 
 
 def main():
@@ -212,14 +251,7 @@ Examples:
         sys.exit(1)
 
     # Prepare output
-    output_lines = []
-    output_lines.append("Date | Currency Pair | Rate | Source")
-    output_lines.append("-" * 60)
-
-    for rate in rates:
-        output_lines.append(format_rate_output(rate))
-
-    output_text = "\n".join(output_lines)
+    output_text = format_table(rates)
 
     # Output results
     if args.output:

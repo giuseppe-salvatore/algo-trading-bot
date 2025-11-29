@@ -59,6 +59,9 @@ The easiest way to run scripts is using the provided `justfile`:
 just analyze              # Run analyze_events script
 just balance SYMBOL=AAPL  # Run balance_tracker for a symbol
 
+# Forex commands
+just fetch-rates 15-01-2024 20-01-2024 USD/GBP  # Fetch exchange rates
+
 # Development commands
 just install    # Install all dependencies
 just sync       # Sync dependencies
@@ -81,20 +84,28 @@ pdm run balance-tracker AAPL
 ```
 alpaca-scripts/
 ├── apps/
-│   └── tax-report/          # Tax reporting application
+│   ├── tax-report/           # Tax reporting application
+│   │   ├── src/
+│   │   ├── tests/
+│   │   ├── README.md
+│   │   └── pyproject.toml
+│   └── forex/                # Forex exchange rate tools
 │       ├── src/
-│       │   ├── analyze_events.py
-│       │   └── balance_tracker.py
-│       ├── tests/            # Test files
-│       ├── README.md         # App-specific documentation
-│       └── pyproject.toml     # App configuration
-├── packages/
-│   └── common/               # Shared libraries
-│       ├── src/
-│       │   └── common/
 │       ├── tests/
 │       ├── README.md
 │       └── pyproject.toml
+├── packages/
+│   ├── common/               # Shared libraries
+│   │   ├── src/
+│   │   ├── tests/
+│   │   ├── README.md
+│   │   └── pyproject.toml
+│   └── exchange_rate/        # Exchange rate proxy package
+│       ├── src/
+│       ├── tests/
+│       ├── README.md
+│       └── pyproject.toml
+├── config/                   # Configuration files
 ├── data/                     # Shared data files
 ├── pyproject.toml            # Root workspace configuration
 ├── justfile                  # Command runner configuration
@@ -113,6 +124,15 @@ Scripts for processing and analyzing trading events from Alpaca taxable activiti
 
 See [apps/tax-report/README.md](apps/tax-report/README.md) for detailed documentation.
 
+### [forex](apps/forex/)
+
+Command-line tools for fetching historical exchange rates from multiple providers. Useful for currency conversion in tax reporting and financial analysis.
+
+**Commands:**
+- `just fetch-rates START_DATE END_DATE CURRENCY_PAIR` - Fetch exchange rates for a date range
+
+See [apps/forex/README.md](apps/forex/README.md) for detailed documentation.
+
 ## Packages
 
 ### [common](packages/common/)
@@ -120,6 +140,12 @@ See [apps/tax-report/README.md](apps/tax-report/README.md) for detailed document
 Shared libraries and utilities that can be reused across multiple apps in the monorepo.
 
 See [packages/common/README.md](packages/common/README.md) for more information.
+
+### [exchange_rate](packages/exchange_rate/)
+
+Abstraction layer for fetching historical exchange rates from multiple providers (exchangerate-api.com, openexchangerates.org, APILayer) with intelligent caching and multi-source support. Used by the forex app for currency conversion.
+
+See [packages/exchange_rate/README.md](packages/exchange_rate/README.md) for detailed documentation.
 
 ## Workspace Management
 

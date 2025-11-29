@@ -1,0 +1,19 @@
+[project]
+name = "exchange-rate"
+version = "0.1.0"
+description = "Exchange rate proxy abstraction layer for fetching historical exchange rates from multiple providers"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31.0",
+]
+
+[tool.pdm]
+package-dir = "src"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.build]
+package-dir = "src"
+
