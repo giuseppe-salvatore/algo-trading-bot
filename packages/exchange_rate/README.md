@@ -140,10 +140,12 @@ all_sources = proxy1.get_all_sources_for_date(date(2025, 1, 15))
   - Always uses USD as base currency
   - Documentation: https://openexchangerates.org/api
 
-#### Phase 2 (Planned)
-- **apilayer** (APILayer)
-  - Paid subscription
-  - Provides historical daily spot rates
+- **apilayer** (APILayer Currencylayer API)
+  - Paid subscription required
+  - API key required
+  - Endpoint: `/currency_data/historical?date={YYYY-MM-DD}&access_key={api_key}`
+  - Always uses USD as base currency
+  - Documentation: https://docs.apilayer.com/currencylayer/docs/api-documentation
 
 ## Architecture
 
@@ -159,7 +161,7 @@ exchange_rate/
 
 1. **ExchangeRateProvider** (abstract base class)
    - Defines interface for all providers
-   - Implementations: `ExchangeRateAPIProvider`, `APILayerProvider`
+   - Implementations: `ExchangeRateAPIProvider`, `OpenExchangeRatesProvider`, `APILayerProvider`
 
 2. **CacheManager**
    - Manages JSON-based cache
