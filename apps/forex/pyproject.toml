@@ -1,0 +1,16 @@
+[project]
+name = "forex"
+version = "0.1.0"
+description = "Forex exchange rate fetching and management tools"
+requires-python = ">=3.12"
+dependencies = [
+    "exchange-rate @ {root = '.', develop = true}",
+    "requests>=2.32.5",
+]
+
+[project.scripts]
+fetch-rates = "fetch_rates:main"
+
+[tool.pdm]
+package-dir = "src"
+

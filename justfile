@@ -69,6 +69,17 @@ fiscal-report-all-time:
     @echo "Running fiscal_year_report for all-time analysis..."
     ./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/fiscal_year_report.py
 
+# Fetch exchange rates for a date range
+# Usage: just fetch-rates 15-01-2024 20-01-2024 USD/GBP
+# Optional flags: --provider openexchangerates --output data/rates.csv
+# Examples:
+#   just fetch-rates 15-01-2024 20-01-2024 USD/GBP
+#   just fetch-rates 15-01-2024 20-01-2024 USD/GBP --provider openexchangerates
+#   just fetch-rates 01-01-2024 31-01-2024 USD/GBP --provider openexchangerates --output data/rates_jan.csv
+fetch-rates START_DATE END_DATE CURRENCY_PAIR *ARGS:
+    @echo "Fetching exchange rates from {{START_DATE}} to {{END_DATE}} for {{CURRENCY_PAIR}}..."
+    ./venv/bin/pdm run -p apps/forex python apps/forex/src/fetch_rates.py {{START_DATE}} {{END_DATE}} {{CURRENCY_PAIR}} {{ARGS}}
+
 # Run tests for all packages
 test:
     @echo "Running tests..."
@@ -102,6 +113,11 @@ help:
     @echo "  just fiscal-report FY=X   - Run fiscal_year_report for FY X (e.g., 2025-26)"
     @echo "  just test-fiscal-report FY=X - Run fiscal_year_report for test FY X"
     @echo "  just fiscal-report-all-time - Run fiscal_year_report for all-time analysis"
+    @echo "  just fetch-rates START=X END=Y PAIR=Z [FLAGS] - Fetch exchange rates"
+    @echo "    Examples:"
+    @echo "      just fetch-rates 15-01-2024 20-01-2024 USD/GBP"
+    @echo "      just fetch-rates 15-01-2024 20-01-2024 USD/GBP --provider openexchangerates"
+    @echo "      just fetch-rates 01-01-2024 31-01-2024 USD/GBP --provider openexchangerates --output data/rates.csv"
     @echo "  just test                 - Run tests"
     @echo "  just lint                 - Lint all Python files"
     @echo "  just format               - Format all Python files"
