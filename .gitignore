@@ -1,4 +1,5 @@
 venv/
+.venv/
 
 # PDM
 .pdm-python
@@ -26,3 +27,9 @@ data/tax-return/reports/
 
 # This is a generated file by the balance_tracker script, don't need to track it
 data/trading/alpaca/test/taxable_activities_analyzed.json
+
+# Exchange rate cache
+data/exchange-rates/cache.json
+
+# Config files with API keys (use config/exchange_rates.json.example as template)
+config/exchange_rates.json
