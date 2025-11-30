@@ -133,14 +133,21 @@ def format_table(rates: list[dict]) -> str:
     if not rates:
         return ""
 
-    # Calculate column widths
+    # Calculate column widths (including "(cache)" suffix for cached entries)
     date_width = max(len("Date"), max(len(str(rate["date"])) for rate in rates))
     currency_width = max(len("Currency Pair"), max(len(rate["currency_pair"]) for rate in rates))
     rate_width = max(
         len("Rate"),
         max(len(f"{rate['rate']:.6f}") for rate in rates),
     )
-    source_width = max(len("Source"), max(len(rate["source"]) for rate in rates))
+    # Source width needs to account for "(cache)" suffix
+    source_width = max(
+        len("Source"),
+        max(
+            len(rate["source"]) + (len(" (cache)") if rate.get("cached", False) else 0)
+            for rate in rates
+        ),
+    )
 
     # Format header
     header = (
@@ -159,7 +166,10 @@ def format_table(rates: list[dict]) -> str:
         date_str = str(rate["date"])
         currency_str = rate["currency_pair"]
         rate_str = f"{rate['rate']:.6f}"
+        # Add "(cache)" suffix if the rate was cached
         source_str = rate["source"]
+        if rate.get("cached", False):
+            source_str = f"{source_str} (cache)"
         row = (
             f"{date_str:<{date_width}} | "
             f"{currency_str:<{currency_width}} | "

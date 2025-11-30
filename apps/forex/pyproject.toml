@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Forex exchange rate fetching and management tools"
 requires-python = ">=3.12"
 dependencies = [
-    "exchange-rate @ {root = '.', develop = true}",
+    "exchange-rate @ file:///${PROJECT_ROOT}/../../packages/exchange_rate",
     "requests>=2.32.5",
 ]
 

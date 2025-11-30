@@ -11,9 +11,15 @@ prepare:
 
 # Install dependencies for all workspace packages
 install:
-    @echo "Installing dependencies..."
+    @echo "Installing dependencies for root workspace..."
     ./venv/bin/pdm install
     ./venv/bin/pip install ruff
+    @echo "Installing dependencies for each app/package..."
+    ./venv/bin/pdm install -p apps/forex --no-self
+    ./venv/bin/pdm install -p apps/tax-report --no-self
+    ./venv/bin/pdm install -p packages/common --no-self
+    ./venv/bin/pdm install -p packages/exchange_rate --no-self
+    @echo "All dependencies installed!"
 
 # Sync dependencies (update lock file and install)
 sync:

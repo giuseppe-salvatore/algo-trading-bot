@@ -24,6 +24,9 @@ Create or edit `config/exchange_rates.json` in the project root:
     "exchangerate_api": {
       "api_key": "your_key_here_or_leave_empty_for_free_tier"
     },
+    "openexchangerates": {
+      "api_key": "your_openexchangerates_key"
+    },
     "apilayer": {
       "api_key": "your_apilayer_key"
     }
@@ -37,6 +40,7 @@ Create or edit `config/exchange_rates.json` in the project root:
 **Or use environment variables** (takes precedence over config file):
 ```bash
 export EXCHANGE_RATE_EXCHANGERATE_API_API_KEY="your_key"
+export EXCHANGE_RATE_OPENEXCHANGERATES_API_KEY="your_key"
 export EXCHANGE_RATE_APILAYER_API_KEY="your_key"
 ```
 
@@ -50,7 +54,7 @@ from datetime import date
 
 # Get a single rate
 rate = get_exchange_rate(date(2025, 1, 15))
-# Returns: {"date": "2025-01-15", "currency_pair": "USD/GBP", "rate": 0.7850, "source": "exchangerate_api"}
+# Returns: {"date": "2025-01-15", "currency_pair": "USD/GBP", "rate": 0.7850, "source": "exchangerate_api", "cached": False}
 
 # Get multiple rates
 dates = [date(2025, 1, 15), date(2025, 1, 16)]
@@ -106,6 +110,7 @@ Rates are automatically cached in `data/exchange-rates/cache.json` (configurable
 - **Prevents redundant API calls**: Same date + same source = uses cache
 - **Supports enrichment**: Different source + same date = adds to cache (doesn't overwrite)
 - **Tracks sources**: Each cached rate includes which provider it came from
+- **Cache indicator**: Returned rate dictionaries include a `cached` boolean field indicating if the rate came from cache
 
 ### Multi-Source Support
 
@@ -140,26 +145,37 @@ all_sources = proxy1.get_all_sources_for_date(date(2025, 1, 15))
   - Always uses USD as base currency
   - Documentation: https://openexchangerates.org/api
 
-#### Phase 2 (Planned)
-- **apilayer** (APILayer)
-  - Paid subscription
-  - Provides historical daily spot rates
+- **apilayer** (APILayer Currencylayer API)
+  - Paid subscription required
+  - API key required
+  - Endpoint: `/currency_data/historical?date={YYYY-MM-DD}&access_key={api_key}`
+  - Always uses USD as base currency
+  - Documentation: https://docs.apilayer.com/currencylayer/docs/api-documentation
 
 ## Architecture
 
 ```
 exchange_rate/
-├── __init__.py              # Package exports
-├── exchange_rate_config.py  # Configuration management
-├── exchange_rate_providers.py # Provider implementations
-└── exchange_rate_proxy.py   # Main proxy and cache manager
+├── __init__.py                    # Package exports
+├── exchange_rate_config.py        # Configuration management
+├── exchange_rate_providers.py     # Re-exports from providers package (backward compatibility)
+├── exchange_rate_proxy.py         # Main proxy and cache manager
+└── providers/                      # Provider implementations
+    ├── __init__.py                # Provider exports
+    ├── base.py                    # ExchangeRateProvider abstract base class
+    ├── exchangerate_api.py        # ExchangeRateAPIProvider
+    ├── openexchangerates.py       # OpenExchangeRatesProvider
+    └── apilayer.py                # APILayerProvider
 ```
 
 ### Key Components
 
-1. **ExchangeRateProvider** (abstract base class)
+1. **ExchangeRateProvider** (abstract base class in `providers/base.py`)
    - Defines interface for all providers
-   - Implementations: `ExchangeRateAPIProvider`, `APILayerProvider`
+   - Implementations:
+     - `ExchangeRateAPIProvider` (in `providers/exchangerate_api.py`)
+     - `OpenExchangeRatesProvider` (in `providers/openexchangerates.py`)
+     - `APILayerProvider` (in `providers/apilayer.py`)
 
 2. **CacheManager**
    - Manages JSON-based cache
@@ -220,6 +236,7 @@ rate_data = get_exchange_rate(transaction_date)
 if rate_data:
     exchange_rate = rate_data["rate"]
     source = rate_data["source"]
+    is_cached = rate_data.get("cached", False)
     # Use rate for tax calculations
 ```
 
@@ -245,6 +262,5 @@ rates = get_exchange_rates(dates)
 ## Related Documentation
 
 - [apps/forex/README.md](../../apps/forex/README.md) - Forex app that uses this package
-- [PLAN_FOR_CURRENCY_CONVERSION.md](../../../PLAN_FOR_CURRENCY_CONVERSION.md) - Overall currency conversion strategy
 - [apps/tax-report/TAX_ACCOUNTING.md](../../apps/tax-report/TAX_ACCOUNTING.md) - Tax accounting methodology
 
