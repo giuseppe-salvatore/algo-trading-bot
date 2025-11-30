@@ -117,4 +117,3 @@ class OpenExchangeRatesProvider(ExchangeRateProvider):
         except (KeyError, ValueError, TypeError) as e:
             print(f"Warning: Invalid API response for {date_str}: {e}")
             return None
-

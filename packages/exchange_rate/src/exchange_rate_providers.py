@@ -9,8 +9,8 @@ New code should import directly from providers package.
 # Re-export from providers package for backward compatibility
 from providers import (
     APILayerProvider,
-    ExchangeRateProvider,
     ExchangeRateAPIProvider,
+    ExchangeRateProvider,
     OpenExchangeRatesProvider,
 )
 

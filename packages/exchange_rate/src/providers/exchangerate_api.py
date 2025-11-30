@@ -126,4 +126,3 @@ class ExchangeRateAPIProvider(ExchangeRateProvider):
         except (KeyError, ValueError, TypeError) as e:
             print(f"Warning: Invalid API response for {transaction_date.isoformat()}: {e}")
             return None
-

@@ -287,6 +287,7 @@ class ExchangeRateProxy:
                     "currency_pair": currency_pair,
                     "rate": rate,
                     "source": self.provider.name,
+                    "cached": True,
                 }
 
         # Fetch from provider
@@ -306,6 +307,7 @@ class ExchangeRateProxy:
             "currency_pair": currency_pair,
             "rate": rate,
             "source": self.provider.name,
+            "cached": False,
         }
 
     def get_rates(

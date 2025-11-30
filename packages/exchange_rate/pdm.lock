@@ -5,18 +5,10 @@
 groups = ["default"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:166b3d0041d137f98da894acd31555642550ebf3ab43a31aeb9fec9d37fb066b"
+content_hash = "sha256:c52e285ddfbd31f6808817daca724c6def9f6f1a26caca36eba03764932d1ef6"
 
 [[metadata.targets]]
 requires_python = ">=3.12"
-
-[[package]]
-name = "alpaca-scripts"
-version = "0.1.0"
-requires_python = ">=3.12"
-path = "../.."
-summary = "A monorepo containing Python scripts and tools for processing and analyzing Alpaca trading data"
-groups = ["default"]
 
 [[package]]
 name = "certifi"

@@ -38,4 +38,3 @@ class ExchangeRateProvider(ABC):
             Exchange rate as float, or None if fetch failed
         """
         pass
-

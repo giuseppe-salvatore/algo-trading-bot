@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:8e756470d07b94c7d88edac0ef1b1a6fca917769a546684116a84a24446c554b"
+content_hash = "sha256:a4998ccaab905534a6028acb11eee0ef129abe5250c2dc7b35c6f5fb4f467637"
 
 [[metadata.targets]]
 requires_python = ">=3.12"
@@ -78,6 +78,17 @@ files = [
     {file = "charset_normalizer-3.4.4-cp314-cp314-win_arm64.whl", hash = "sha256:de00632ca48df9daf77a2c65a484531649261ec9f25489917f09e455cb09ddb2"},
     {file = "charset_normalizer-3.4.4-py3-none-any.whl", hash = "sha256:7a32c560861a02ff789ad905a2fe94e3f840803362c84fecf1851cb4cf3dc37f"},
     {file = "charset_normalizer-3.4.4.tar.gz", hash = "sha256:94537985111c35f28720e43603b8e7b43a6ecfb2ce1d3058bbe955b73404e21a"},
+]
+
+[[package]]
+name = "exchange-rate"
+version = "0.1.0"
+requires_python = ">=3.12"
+path = "../../packages/exchange_rate"
+summary = "Exchange rate proxy abstraction layer for fetching historical exchange rates from multiple providers"
+groups = ["default"]
+dependencies = [
+    "requests>=2.31.0",
 ]
 
 [[package]]
