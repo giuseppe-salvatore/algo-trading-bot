@@ -10,8 +10,10 @@ Uses the same Average Cost Basis method as balance_tracker.py for consistency.
 import argparse
 import csv
 import json
+import os
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,28 @@ from balance_tracker import (
     load_splits,
     resolve_symbol,
 )
+from fx_utils import GBPConversionInfo, get_gbp_conversion_info
+
+try:
+    # Preferred: provided by the installed exchange-rate package
+    from exchange_rate_config import get_default_provider
+except ImportError:  # pragma: no cover - fallback to direct src path
+    project_root_for_fx = Path(__file__).parent.parent.parent.parent
+    fx_src_path = project_root_for_fx / "packages" / "exchange_rate" / "src"
+    if str(fx_src_path) not in sys.path:
+        sys.path.insert(0, str(fx_src_path))
+    from exchange_rate_config import get_default_provider
+
+
+@dataclass
+class TaxableEventGBP:
+    """Represents a single taxable event with original and GBP values."""
+
+    symbol: str
+    transaction_time: str
+    profit_original: float
+    profit_gbp: float
+    fx: GBPConversionInfo | None
 
 
 def parse_fy_date_range(fy_string: str) -> tuple[datetime, datetime]:
@@ -113,7 +137,9 @@ def calculate_fy_gains_per_symbol(
     input_file: str,
     splits_file: str | None = None,
     name_changes_file: str | None = None,
-) -> dict[str, float]:
+    fx_provider: str | None = None,
+    base_currency: str = "USD",
+) -> tuple[dict[str, float], dict[str, float], list[TaxableEventGBP], dict[str, Any]]:
     """
     Calculate capital gains per symbol for the specified UK Financial Year.
 
@@ -182,6 +208,20 @@ def calculate_fy_gains_per_symbol(
 
     # Track gains per symbol (only for FY period)
     gains_by_symbol: dict[str, float] = defaultdict(float)
+    gains_by_symbol_gbp: dict[str, float] = defaultdict(float)
+    taxable_events_gbp: list[TaxableEventGBP] = []
+
+    # FX statistics / metadata
+    fx_metadata: dict[str, Any] = {
+        "provider": fx_provider,
+        "base_currency": base_currency,
+        "target_currency": "GBP",
+        "dates_used": set(),
+        # Becomes False if ANY FX lookup fails for a taxable event.
+        "all_rates_available": True,
+        # Track which dates we failed to obtain a rate for.
+        "missing_rate_dates": set(),
+    }
 
     # Process each symbol
     for symbol, symbol_events in events_by_symbol.items():
@@ -346,7 +386,43 @@ def calculate_fy_gains_per_symbol(
             if is_taxable_event and profit is not None and in_fy_range:
                 gains_by_symbol[symbol] += profit
 
-    return dict(gains_by_symbol)
+                fx_info: GBPConversionInfo | None = None
+                profit_gbp = 0.0
+                if fx_provider:
+                    fx_info = get_gbp_conversion_info(
+                        transaction_time=transaction_time,
+                        provider_name=fx_provider,
+                        from_currency=base_currency,
+                        to_currency="GBP",
+                    )
+                    if fx_info:
+                        profit_gbp = fx_info.convert(profit)
+                        gains_by_symbol_gbp[symbol] += profit_gbp
+                        fx_metadata["dates_used"].add(fx_info.rate_date)
+                    else:
+                        # Mark that FX data is incomplete for this run
+                        fx_metadata["all_rates_available"] = False
+                        fx_metadata["missing_rate_dates"].add(
+                            transaction_time.split("T")[0]
+                            if "T" in transaction_time
+                            else transaction_time[:10]
+                        )
+
+                taxable_events_gbp.append(
+                    TaxableEventGBP(
+                        symbol=symbol,
+                        transaction_time=transaction_time,
+                        profit_original=profit,
+                        profit_gbp=profit_gbp,
+                        fx=fx_info,
+                    )
+                )
+
+    # Convert sets to sorted lists for JSON-serialisable metadata
+    fx_metadata["dates_used"] = sorted(fx_metadata["dates_used"])
+    fx_metadata["missing_rate_dates"] = sorted(fx_metadata["missing_rate_dates"])
+
+    return dict(gains_by_symbol), dict(gains_by_symbol_gbp), taxable_events_gbp, fx_metadata
 
 
 def generate_text_report(
@@ -354,6 +430,8 @@ def generate_text_report(
     fy_start: datetime | None,
     fy_end: datetime | None,
     gains_by_symbol: dict[str, float],
+    gains_by_symbol_gbp: dict[str, float] | None,
+    fx_metadata: dict[str, Any] | None,
     output_file: str,
 ):
     """Generate human-readable text report."""
@@ -362,6 +440,7 @@ def generate_text_report(
 
     # Calculate totals
     total_profit = sum(gains_by_symbol.values())
+    total_profit_gbp = sum(gains_by_symbol_gbp.values()) if gains_by_symbol_gbp else None
     gains_only = {s: p for s, p in gains_by_symbol.items() if p > 0}
     losses_only = {s: p for s, p in gains_by_symbol.items() if p <= 0}
 
@@ -386,6 +465,18 @@ def generate_text_report(
         f.write("Summary:\n")
         f.write("-" * 80 + "\n")
         f.write(f"Total Profit/Loss: {format_currency(total_profit)}\n")
+        if total_profit_gbp is not None:
+            f.write(f"Total Profit/Loss (GBP): £{total_profit_gbp:,.2f}\n")
+        if fx_metadata and fx_metadata.get("provider"):
+            provider = fx_metadata["provider"]
+            base_ccy = fx_metadata.get("base_currency", "USD")
+            f.write(
+                f"FX Provider: {provider} (converting {base_ccy} to GBP using per-day spot rates)\n"
+            )
+            f.write(
+                "Note: Missing FX data for the chosen provider is fetched on-demand "
+                "and cached for future runs.\n"
+            )
         f.write(f"Number of Symbols with Gains: {len(gains_only)}\n")
         f.write(f"Number of Symbols with Losses: {len(losses_only)}\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
@@ -394,11 +485,21 @@ def generate_text_report(
         if sorted_gains:
             f.write("Gains by Symbol (sorted by profit, highest first):\n")
             f.write("-" * 80 + "\n")
-            f.write(f"{'Symbol':<15} {'Profit/Loss':>20}\n")
+            if gains_by_symbol_gbp:
+                f.write(f"{'Symbol':<15} {'Profit/Loss':>20} {'Profit/Loss (GBP)':>20}\n")
+            else:
+                f.write(f"{'Symbol':<15} {'Profit/Loss':>20}\n")
             f.write("-" * 80 + "\n")
 
             for symbol, profit in sorted_gains:
-                f.write(f"{symbol:<15} {format_currency(profit):>20}\n")
+                if gains_by_symbol_gbp:
+                    profit_gbp = gains_by_symbol_gbp.get(symbol, 0.0)
+                    f.write(
+                        f"{symbol:<15} {format_currency(profit):>20} "
+                        f"{'£' + format(profit_gbp, ',.2f'):>20}\n"
+                    )
+                else:
+                    f.write(f"{symbol:<15} {format_currency(profit):>20}\n")
 
             f.write("-" * 80 + "\n\n")
 
@@ -427,6 +528,8 @@ def generate_json_report(
     fy_start: datetime | None,
     fy_end: datetime | None,
     gains_by_symbol: dict[str, float],
+    gains_by_symbol_gbp: dict[str, float] | None,
+    fx_metadata: dict[str, Any] | None,
     output_file: str,
 ):
     """Generate JSON report."""
@@ -436,16 +539,34 @@ def generate_json_report(
     # Sort by profit (highest first)
     sorted_gains = sorted(gains_by_symbol.items(), key=lambda x: x[1], reverse=True)
 
+    total_profit = sum(gains_by_symbol.values())
+    total_profit_gbp = sum(gains_by_symbol_gbp.values()) if gains_by_symbol_gbp else None
+
     report_data: dict[str, Any] = {
-        "total_profit_loss": sum(gains_by_symbol.values()),
-        "gains_by_symbol": [
-            {"symbol": symbol, "profit_loss": profit} for symbol, profit in sorted_gains
-        ],
+        "total_profit_loss": total_profit,
+        "total_profit_loss_gbp": total_profit_gbp,
+        "gains_by_symbol": [],
         "metadata": {
             "generated_at": datetime.now().isoformat(),
             "num_symbols": len(gains_by_symbol),
         },
     }
+
+    for symbol, profit in sorted_gains:
+        entry: dict[str, Any] = {"symbol": symbol, "profit_loss": profit}
+        if gains_by_symbol_gbp:
+            entry["profit_loss_gbp"] = gains_by_symbol_gbp.get(symbol, 0.0)
+        report_data["gains_by_symbol"].append(entry)
+
+    if fx_metadata:
+        # Shallow copy and ensure JSON-serialisable types
+        metadata_fx = {
+            "provider": fx_metadata.get("provider"),
+            "base_currency": fx_metadata.get("base_currency"),
+            "target_currency": fx_metadata.get("target_currency"),
+            "dates_used": fx_metadata.get("dates_used", []),
+        }
+        report_data.setdefault("fx_metadata", metadata_fx)
 
     if fy_string:
         report_data["financial_year"] = fy_string
@@ -463,8 +584,8 @@ def generate_json_report(
 
 
 def generate_csv_report(
-    fy_string: str | None,
     gains_by_symbol: dict[str, float],
+    gains_by_symbol_gbp: dict[str, float] | None,
     output_file: str,
 ):
     """Generate CSV report."""
@@ -476,10 +597,16 @@ def generate_csv_report(
 
     with open(output_file, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Symbol", "Profit/Loss"])
+        if gains_by_symbol_gbp:
+            writer.writerow(["Symbol", "Profit/Loss", "Profit/Loss (GBP)"])
+        else:
+            writer.writerow(["Symbol", "Profit/Loss"])
 
         for symbol, profit in sorted_gains:
-            writer.writerow([symbol, profit])
+            if gains_by_symbol_gbp:
+                writer.writerow([symbol, profit, gains_by_symbol_gbp.get(symbol, 0.0)])
+            else:
+                writer.writerow([symbol, profit])
 
     print(f"CSV report written to {output_file}")
 
@@ -522,6 +649,16 @@ def main():
         "-o",
         type=str,
         help="Output directory (overrides default: data/tax-return/reports/)",
+    )
+    parser.add_argument(
+        "--fx-provider",
+        type=str,
+        default=None,
+        help=(
+            "Exchange rate provider to use for GBP conversion. "
+            "Precedence: --fx-provider > TAX_REPORT_FX_PROVIDER env var > "
+            "config/exchange_rates.json default_provider > 'exchangerate_api'."
+        ),
     )
 
     args = parser.parse_args()
@@ -579,10 +716,33 @@ def main():
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resolve FX provider using precedence:
+    # 1) CLI --fx-provider
+    # 2) TAX_REPORT_FX_PROVIDER env var
+    # 3) config/exchange_rates.json default_provider
+    # 4) hard-coded 'exchangerate_api'
+    env_fx_provider = os.getenv("TAX_REPORT_FX_PROVIDER")
+    if args.fx_provider:
+        resolved_fx_provider = args.fx_provider
+    elif env_fx_provider:
+        resolved_fx_provider = env_fx_provider
+    else:
+        resolved_fx_provider = get_default_provider()
+
+    print(f"Using FX provider for GBP conversion: {resolved_fx_provider}")
+
     # Calculate FY gains
     try:
-        gains_by_symbol = calculate_fy_gains_per_symbol(
-            fy_start, fy_end, str(input_file), splits_file, name_changes_file
+        gains_by_symbol, gains_by_symbol_gbp, _taxable_events_gbp, fx_metadata = (
+            calculate_fy_gains_per_symbol(
+                fy_start,
+                fy_end,
+                str(input_file),
+                splits_file,
+                name_changes_file,
+                fx_provider=resolved_fx_provider,
+                base_currency="USD",
+            )
         )
     except FileNotFoundError as e:
         print(str(e), file=sys.stderr)
@@ -601,25 +761,104 @@ def main():
         base_filename = "all_time_capital_gains_report"
         report_title = "All-Time"
 
-    text_file = output_dir / f"{base_filename}.txt"
-    json_file = output_dir / f"{base_filename}.json"
-    csv_file = output_dir / f"{base_filename}.csv"
+    # Always generate USD-only reports to ensure we have a stable baseline,
+    # regardless of FX provider availability.
+    usd_text_file = output_dir / f"{base_filename}.USD.txt"
+    usd_json_file = output_dir / f"{base_filename}.USD.json"
+    usd_csv_file = output_dir / f"{base_filename}.USD.csv"
 
-    generate_text_report(fy_string, fy_start, fy_end, gains_by_symbol, str(text_file))
-    generate_json_report(fy_string, fy_start, fy_end, gains_by_symbol, str(json_file))
-    generate_csv_report(fy_string, gains_by_symbol, str(csv_file))
+    generate_text_report(
+        fy_string,
+        fy_start,
+        fy_end,
+        gains_by_symbol,
+        gains_by_symbol_gbp=None,
+        fx_metadata=None,
+        output_file=str(usd_text_file),
+    )
+    generate_json_report(
+        fy_string,
+        fy_start,
+        fy_end,
+        gains_by_symbol,
+        gains_by_symbol_gbp=None,
+        fx_metadata=None,
+        output_file=str(usd_json_file),
+    )
+    generate_csv_report(
+        gains_by_symbol,
+        gains_by_symbol_gbp=None,
+        output_file=str(usd_csv_file),
+    )
+
+    # Decide whether we can safely generate GBP-converted mirror reports.
+    can_generate_gbp = bool(gains_by_symbol_gbp) and fx_metadata is not None
+    if can_generate_gbp:
+        all_rates_available = fx_metadata.get("all_rates_available", True)
+    else:
+        all_rates_available = False
+
+    gbp_text_file = None
+    gbp_json_file = None
+    gbp_csv_file = None
+
+    if can_generate_gbp and all_rates_available:
+        gbp_text_file = output_dir / f"{base_filename}.USD-GBP.txt"
+        gbp_json_file = output_dir / f"{base_filename}.USD-GBP.json"
+        gbp_csv_file = output_dir / f"{base_filename}.USD-GBP.csv"
+
+        generate_text_report(
+            fy_string,
+            fy_start,
+            fy_end,
+            gains_by_symbol,
+            gains_by_symbol_gbp,
+            fx_metadata,
+            str(gbp_text_file),
+        )
+        generate_json_report(
+            fy_string,
+            fy_start,
+            fy_end,
+            gains_by_symbol,
+            gains_by_symbol_gbp,
+            fx_metadata,
+            str(gbp_json_file),
+        )
+        generate_csv_report(
+            gains_by_symbol,
+            gains_by_symbol_gbp,
+            str(gbp_csv_file),
+        )
+    elif can_generate_gbp and not all_rates_available:
+        # Informative warning: we had some GBP data but FX coverage is incomplete,
+        # so we intentionally skip writing USD-GBP reports.
+        missing_dates = fx_metadata.get("missing_rate_dates", [])
+        print(
+            "Warning: Skipping GBP-converted reports because some FX rates are missing "
+            f"for provider {fx_metadata.get('provider')!r}. "
+            f"Missing dates (sample): {missing_dates[:10]}",
+            file=sys.stderr,
+        )
 
     # Print summary
     total_profit = sum(gains_by_symbol.values())
+    total_profit_gbp = sum(gains_by_symbol_gbp.values()) if gains_by_symbol_gbp else None
     print(f"\n{'=' * 80}")
     print(f"Report Summary for {report_title}:")
     print(f"{'=' * 80}")
     print(f"Total Profit/Loss: {format_currency(total_profit)}")
+    if total_profit_gbp is not None:
+        print(f"Total Profit/Loss (GBP): £{total_profit_gbp:,.2f}")
     print(f"Number of Symbols: {len(gains_by_symbol)}")
     print("Reports generated:")
-    print(f"  - {text_file}")
-    print(f"  - {json_file}")
-    print(f"  - {csv_file}")
+    print(f"  - {usd_text_file}")
+    print(f"  - {usd_json_file}")
+    print(f"  - {usd_csv_file}")
+    if gbp_text_file and gbp_json_file and gbp_csv_file:
+        print(f"  - {gbp_text_file}")
+        print(f"  - {gbp_json_file}")
+        print(f"  - {gbp_csv_file}")
 
 
 if __name__ == "__main__":

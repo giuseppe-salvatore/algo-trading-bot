@@ -3,7 +3,9 @@ name = "tax-report"
 version = "0.1.0"
 description = "Scripts for processing and analyzing trading events from Alpaca taxable activities data"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "exchange-rate @ file:///${PROJECT_ROOT}/../../packages/exchange_rate",
+]
 
 [project.scripts]
 analyze-events = "analyze_events:main"
