@@ -11,11 +11,24 @@ Takes a symbol as input and generates a human-readable report showing:
 
 import argparse
 import json
+import os
 import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from fx_utils import GBPConversionInfo, get_gbp_conversion_info
+
+try:
+    # Preferred: provided by the installed exchange-rate package
+    from exchange_rate_config import get_default_provider
+except ImportError:  # pragma: no cover - fallback to direct src path
+    project_root_for_fx = Path(__file__).parent.parent.parent.parent
+    fx_src_path = project_root_for_fx / "packages" / "exchange_rate" / "src"
+    if str(fx_src_path) not in sys.path:
+        sys.path.insert(0, str(fx_src_path))
+    from exchange_rate_config import get_default_provider
 
 
 def format_datetime(iso_timestamp: str) -> str:
@@ -948,15 +961,20 @@ def generate_report(
         f.write(f"Total Profit: {format_currency(total_profit)}\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
-        # Table header
-        f.write("-" * 155 + "\n")
+        # Table header (USD-only report)
+        # Keep column widths in a single header definition so that we can:
+        # - Use the same widths for header and data rows
+        # - Derive the table width for the separator lines dynamically
+        # USD report column layout (note: Cost Basis (USD) is 1 char wider than GBP layout)
         header = (
             f"{'Date/Time':<20} {'Side':<10} {'Qty':<12} {'Price':<12} "
-            f"{'Cost Basis':<15} {'Status':<10} {'Type':<6} {'Position':<12} "
+            f"{'Cost Basis (USD)':<16} {'Status/Icon':<12} {'Type':<6} {'Position':<12} "
             f"{'Avg Cost':<12} {'Profit':<15} {'Accumulated Gains':<18}\n"
         )
+        usd_table_width = len(header.rstrip("\n"))
+        f.write("-" * usd_table_width + "\n")
         f.write(header)
-        f.write("-" * 155 + "\n")
+        f.write("-" * usd_table_width + "\n")
 
         # Process each event
         for pe in processed_events:
@@ -1098,10 +1116,11 @@ def generate_report(
             else:
                 accumulated_gains_str = "-"
 
-            # Write row
+            # Write row using the same column widths as the header.
+            # Note: Status column includes a 1‑char icon + space + 9‑char status text = 11 chars.
             row = (
                 f"{date_time:<20} {side:<10} {qty_str:<12} {price_str:<12} "
-                f"{cost_basis_str:<15} {status_icon} {status:<9} {position_type:<6} "
+                f"{cost_basis_str:<16} {status_icon} {status:<9} {position_type:<6} "
                 f"{position_str:<12} {avg_cost_str:<12} {profit_str:<15} "
                 f"{accumulated_gains_str:<18}\n"
             )
@@ -1111,7 +1130,8 @@ def generate_report(
             if status == "closed":
                 f.write("\n")
 
-        f.write("-" * 125 + "\n\n")
+        # Closing separator matching the table width
+        f.write("-" * usd_table_width + "\n\n")
 
         # Summary
         final_position = processed_events[-1]["position_after"]
@@ -1132,6 +1152,76 @@ def generate_report(
         f.write("-" * 80 + "\n")
 
     print(f"Report written to {output_file}")
+
+
+def _compute_gbp_for_events(
+    processed_events: list[dict[str, Any]],
+    fx_provider: str | None,
+    base_currency: str = "USD",
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """
+    Compute GBP-converted profit for each processed event (if possible).
+
+    Returns:
+        - List of per-event FX info dicts aligned with processed_events
+        - FX metadata (provider, base/target, dates_used, all_rates_available, missing_rate_dates)
+    """
+    per_event_fx: list[dict[str, Any]] = []
+    fx_metadata: dict[str, Any] = {
+        "provider": fx_provider,
+        "base_currency": base_currency,
+        "target_currency": "GBP",
+        "dates_used": set(),
+        "all_rates_available": True,
+        "missing_rate_dates": set(),
+    }
+
+    if not fx_provider:
+        for _ in processed_events:
+            per_event_fx.append({"profit_gbp": None, "fx": None})
+        fx_metadata["all_rates_available"] = False
+        return per_event_fx, fx_metadata
+
+    for pe in processed_events:
+        profit = pe.get("profit")
+        tx_time = pe.get("transaction_time", "")
+        event_cost_basis = pe.get("event_cost_basis", 0.0)
+        fx_info: GBPConversionInfo | None = None
+        profit_gbp: float | None = None
+        cost_basis_gbp: float | None = None
+        rate: float | None = None
+
+        fx_info = get_gbp_conversion_info(
+            transaction_time=tx_time,
+            provider_name=fx_provider,
+            from_currency=base_currency,
+            to_currency="GBP",
+        )
+        if fx_info:
+            # Always convert cost basis so it is available on every row
+            cost_basis_gbp = fx_info.convert(float(event_cost_basis))
+            rate = fx_info.rate
+            fx_metadata["dates_used"].add(fx_info.rate_date)
+            # Only convert profit when it exists
+            if profit is not None:
+                profit_gbp = fx_info.convert(profit)
+        else:
+            fx_metadata["all_rates_available"] = False
+            date_str = tx_time.split("T")[0] if "T" in tx_time else tx_time[:10]
+            fx_metadata["missing_rate_dates"].add(date_str)
+
+        per_event_fx.append(
+            {
+                "profit_gbp": profit_gbp,
+                "cost_basis_gbp": cost_basis_gbp,
+                "rate": rate,
+                "fx": fx_info,
+            }
+        )
+
+    fx_metadata["dates_used"] = sorted(fx_metadata["dates_used"])
+    fx_metadata["missing_rate_dates"] = sorted(fx_metadata["missing_rate_dates"])
+    return per_event_fx, fx_metadata
 
 
 def main():
@@ -1167,6 +1257,16 @@ def main():
         "-o",
         type=str,
         help="Path to output report file (overrides default)",
+    )
+    parser.add_argument(
+        "--fx-provider",
+        type=str,
+        default=None,
+        help=(
+            "Exchange rate provider to use for GBP conversion. "
+            "Precedence: --fx-provider > TAX_REPORT_FX_PROVIDER env var > "
+            "config/exchange_rates.json default_provider > 'exchangerate_api'."
+        ),
     )
 
     args = parser.parse_args()
@@ -1204,6 +1304,22 @@ def main():
         # Default name_changes file location (same directory as input)
         name_changes_file = str(input_file.parent / "name_changes.json")
 
+    # Resolve FX provider with same precedence as fiscal_year_report
+    env_fx_provider = os.getenv("TAX_REPORT_FX_PROVIDER")
+    if args.fx_provider is not None:
+        # Handle empty string from CLI as explicit None (disable GBP conversion)
+        resolved_fx_provider = args.fx_provider.strip() if args.fx_provider.strip() else None
+    elif env_fx_provider:
+        # Handle empty string from env var as explicit None
+        resolved_fx_provider = env_fx_provider.strip() if env_fx_provider.strip() else None
+    else:
+        resolved_fx_provider = get_default_provider()
+
+    if resolved_fx_provider:
+        print(f"Using FX provider for GBP conversion in balance tracker: {resolved_fx_provider}")
+    else:
+        print("GBP conversion disabled (no FX provider configured)")
+
     # Track balance (this will resolve symbol internally)
     try:
         processed_events, latest_symbol, name_change_history = track_balance(
@@ -1213,31 +1329,222 @@ def main():
         print(str(e))
         sys.exit(1)
 
-    # Determine output filename using latest symbol
+    # Determine output filenames using latest symbol
     if args.output:
-        output_file = Path(args.output)
+        base_output = Path(args.output)
+        usd_output_file = base_output.with_suffix(".USD.txt")
+        gbp_output_file = base_output.with_suffix(".USD-GBP.txt")
     else:
         # Default to reports subfolder in live/test directory (based on input path)
         reports_dir = input_file.parent / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
-        output_file = reports_dir / f"{latest_symbol.upper()}_balance_report.txt"
+        base_name = f"{latest_symbol.upper()}_balance_report"
+        usd_output_file = reports_dir / f"{base_name}.USD.txt"
+        gbp_output_file = reports_dir / f"{base_name}.USD-GBP.txt"
+
+    # Backwards-compatibility: unsuffixed report name pointing to USD variant
+    legacy_output_file = usd_output_file.with_name(usd_output_file.name.replace(".USD.txt", ".txt"))
 
     if processed_events:
-        # Generate report using latest symbol
-        generate_report(latest_symbol, processed_events, str(output_file), name_change_history)
+        # Always generate USD report (content unchanged from original implementation)
+        generate_report(
+            latest_symbol,
+            processed_events,
+            str(usd_output_file),
+            name_change_history,
+        )
 
-        # Create symlink if input symbol differs from latest symbol
+        # Generate a separate GBP mirror report using per-event profits.
+        # This uses the same FX provider precedence as fiscal_year_report.
+        per_event_fx, fx_metadata = _compute_gbp_for_events(processed_events, resolved_fx_provider)
+        all_rates_available = fx_metadata.get("all_rates_available", True)
+
+        if all_rates_available:
+            total_profit_usd = sum(pe.get("profit", 0) or 0 for pe in processed_events)
+            total_profit_gbp = sum((fx["profit_gbp"] or 0.0) for fx in per_event_fx)
+
+            with open(gbp_output_file, "w") as f:
+                f.write("=" * 80 + "\n")
+                f.write(f"Balance Tracker Report for {latest_symbol.upper()} (USD → GBP)\n")
+                f.write("=" * 80 + "\n\n")
+
+                if name_change_history:
+                    change_names = [h["from"] for h in name_change_history] + [
+                        latest_symbol.upper()
+                    ]
+                    change_desc = " → ".join(change_names)
+                    f.write("⚠️  SYMBOL NAME CHANGE DETECTED\n")
+                    f.write(f"Symbol Name History: {change_desc}\n")
+                    f.write("This report consolidates events from all related symbol names.\n\n")
+
+                f.write(f"Total Events: {len(processed_events)}\n")
+                f.write(f"Total Profit (USD): {format_currency(total_profit_usd)}\n")
+                f.write(f"Total Profit (GBP): £{total_profit_gbp:,.2f}\n")
+                if fx_metadata.get("provider"):
+                    f.write(
+                        f"FX Provider: {fx_metadata['provider']} "
+                        f"(converting {fx_metadata.get('base_currency', 'USD')} "
+                        f"to {fx_metadata.get('target_currency', 'GBP')} "
+                        "using per-day spot rates)\n"
+                    )
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+                # Table header with GBP columns
+                header_gbp = (
+                    f"{'Date/Time':<20} {'Side':<10} {'Qty':<12} {'Price':<12} "
+                    f"{'Cost Basis (USD)':<18} {'Cost Basis (GBP)':<18} "
+                    f"{'Status/Icon':<12} {'Type':<6} {'Position':<12} "
+                    f"{'Avg Cost':<12} {'Profit (USD)':<15} {'Profit (GBP)':<15} "
+                    f"{'Acc. Gains (USD)':<18} {'Acc. Gains (GBP)':<18} "
+                    f"{'FX Rate (USD→GBP)':<18}\n"
+                )
+                gbp_table_width = len(header_gbp.rstrip("\n"))
+                f.write("-" * gbp_table_width + "\n")
+                f.write(header_gbp)
+                f.write("-" * gbp_table_width + "\n")
+
+                running_accum_gbp = 0.0
+
+                for pe, fx_info in zip(processed_events, per_event_fx, strict=True):
+                    side = pe["side"].upper()
+                    qty = pe["qty"]
+                    price = pe["price"]
+                    event_cost_basis = pe["event_cost_basis"]
+                    status_icon = pe["status_icon"]
+                    status = pe["status"]
+                    position = pe["position_after"]
+                    avg_cost = pe["avg_cost_after"]
+
+                    date_time = format_datetime(pe["transaction_time"])
+                    qty_str = format_number(qty)
+                    price_str = format_currency(price)
+                    cost_basis_usd_str = format_currency(event_cost_basis)
+                    position_str = format_number(position) if position != 0 else "0"
+                    avg_cost_str = format_currency(avg_cost) if avg_cost != 0 else "-"
+
+                    if status == "opened":
+                        if position > 0:
+                            position_type = "LONG"
+                        elif position < 0:
+                            position_type = "SHORT"
+                        else:
+                            position_type = "-"
+                    else:
+                        position_type = "-"
+
+                    profit = pe.get("profit")
+                    if profit is not None:
+                        profit_str = format_currency(profit)
+                    else:
+                        profit_str = "-"
+
+                    profit_gbp_val = fx_info.get("profit_gbp")
+                    if profit_gbp_val is not None:
+                        profit_gbp_str = f"£{profit_gbp_val:,.2f}"
+                    else:
+                        profit_gbp_str = "-"
+
+                    accumulated_gains = pe.get("accumulated_gains", 0.0)
+                    if profit is not None:
+                        accumulated_gains_str = format_currency(accumulated_gains)
+                    else:
+                        accumulated_gains_str = "-"
+
+                    if profit_gbp_val is not None:
+                        running_accum_gbp += profit_gbp_val
+                        accumulated_gains_gbp_str = f"£{running_accum_gbp:,.2f}"
+                    else:
+                        accumulated_gains_gbp_str = "-"
+
+                    cost_basis_gbp_val = fx_info.get("cost_basis_gbp")
+                    if cost_basis_gbp_val is not None:
+                        cost_basis_gbp_str = f"£{cost_basis_gbp_val:,.2f}"
+                    else:
+                        cost_basis_gbp_str = "-"
+
+                    rate_val = fx_info.get("rate")
+                    if rate_val is not None:
+                        rate_str = f"{rate_val:.6f}"
+                    else:
+                        rate_str = "-"
+
+                    # Row uses the same column widths as header_gbp.
+                    # Status column again includes icon + space + 9‑char text = 11 chars.
+                    row = (
+                        f"{date_time:<20} {side:<10} {qty_str:<12} {price_str:<12} "
+                        f"{cost_basis_usd_str:<18} {cost_basis_gbp_str:<18} "
+                        f"{status_icon} {status:<9} {position_type:<6} "
+                        f"{position_str:<12} {avg_cost_str:<12} {profit_str:<15} "
+                        f"{profit_gbp_str:<15} {accumulated_gains_str:<18} "
+                        f"{accumulated_gains_gbp_str:<18} {rate_str:<18}\n"
+                    )
+                    f.write(row)
+
+                    if status == "closed":
+                        f.write("\n")
+
+                # Closing separator matching the GBP table width
+                f.write("-" * gbp_table_width + "\n\n")
+
+                final_position = processed_events[-1]["position_after"]
+                final_cost_basis = processed_events[-1]["cost_basis_after"]
+                final_avg_cost = processed_events[-1]["avg_cost_after"]
+
+                f.write("Summary:\n")
+                f.write("-" * 80 + "\n")
+                f.write(f"Final Position: {format_number(final_position)}\n")
+                if final_position > 0:
+                    f.write(f"Final Cost Basis: {format_currency(final_cost_basis)}\n")
+                    f.write(f"Average Cost per Share: {format_currency(final_avg_cost)}\n")
+                elif final_position < 0:
+                    f.write(f"Short Proceeds: {format_currency(abs(final_cost_basis))}\n")
+                    f.write(f"Average Proceeds per Share: {format_currency(final_avg_cost)}\n")
+                else:
+                    f.write(f"Final Cost Basis: {format_currency(final_cost_basis)}\n")
+                f.write("-" * 80 + "\n")
+
+            print(f"USD-GBP report written to {gbp_output_file}")
+        else:
+            print(
+                "Warning: Skipping USD-GBP trading report because some FX rates "
+                f"are missing for provider {fx_metadata.get('provider')!r}."
+            )
+
+        # Maintain legacy unsuffixed file as a symlink (or direct copy fallback)
+        try:
+            if legacy_output_file.exists():
+                legacy_output_file.unlink()
+            legacy_output_file.symlink_to(usd_output_file.name)
+            print(f"Created legacy symlink: {legacy_output_file.name} -> {usd_output_file.name}")
+        except (OSError, NotImplementedError):
+            # On Windows or if symlinks aren't supported, fall back to copying
+            try:
+                legacy_output_file.write_text(usd_output_file.read_text(encoding="utf-8"))
+                print(
+                    f"Created legacy copy: {legacy_output_file.name} (from {usd_output_file.name})"
+                )
+            except OSError:
+                print(
+                    "Warning: Could not create legacy AAL_balance_report.txt link/copy; "
+                    "only .USD/.USD-GBP reports are available."
+                )
+
+        # Create symlink if input symbol differs from latest symbol (for USD report)
         if symbol.upper() != latest_symbol.upper():
-            input_symbol_report = output_file.parent / f"{symbol.upper()}_balance_report.txt"
+            input_symbol_report = (
+                usd_output_file.parent / f"{symbol.upper()}_balance_report.USD.txt"
+            )
             try:
                 if input_symbol_report.exists():
                     input_symbol_report.unlink()
-                input_symbol_report.symlink_to(output_file.name)
-                print(f"Created symlink: {input_symbol_report.name} -> {output_file.name}")
-            except (OSError, NotImplementedError):
-                # On Windows or if symlinks aren't supported, just print a note
+                input_symbol_report.symlink_to(usd_output_file.name)
                 print(
-                    f"Note: Report generated as {output_file.name} "
+                    f"Created symlink for input symbol: "
+                    f"{input_symbol_report.name} -> {usd_output_file.name}"
+                )
+            except (OSError, NotImplementedError):
+                print(
+                    f"Note: USD report generated as {usd_output_file.name} "
                     f"(symbol resolved from {symbol.upper()} to {latest_symbol.upper()})"
                 )
 

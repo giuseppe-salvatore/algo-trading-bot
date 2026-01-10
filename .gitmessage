@@ -1,0 +1,28 @@
+# Commit Message Template
+# 
+# Format: <type>[optional scope]: <description>
+# 
+# Title (first line):
+# - Keep to 50-72 characters
+# - Use imperative mood (fix, add, update, not fixed, added, updated)
+# - Capitalize first letter
+# - No period at end
+# 
+# Types: fix, feat, docs, style, refactor, perf, test, chore, ci, build
+# 
+# Body (after blank line):
+# - Wrap at 72 characters per line
+# - Use imperative mood
+# - Explain what and why, not how
+# - Use bullet points for multiple changes
+# 
+# Example:
+# fix(ci): match justfile install pattern for workspace deps
+# 
+# Use pdm install followed by explicit workspace package installations
+# to ensure all workspace dependencies are properly installed.
+# 
+# - Install dependencies for each workspace package
+# - Fixes ModuleNotFoundError for 'requests' module
+# - Ensures transitive dependencies are resolved
+#

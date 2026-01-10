@@ -48,6 +48,10 @@ def load_config(config_file: str | Path | None = None) -> dict[str, Any]:
             "apilayer": {"api_key": ""},
         },
         "cache": {"directory": "data/exchange-rates"},
+        # Optional: default provider name, used by higher-level tools
+        # when no CLI/env override is provided.
+        # If not set in file, callers should fall back to a sensible default.
+        "default_provider": "exchangerate_api",
     }
 
     # Load from file if it exists
@@ -61,6 +65,9 @@ def load_config(config_file: str | Path | None = None) -> dict[str, Any]:
                 # Merge cache settings
                 if "cache" in file_config:
                     config["cache"].update(file_config["cache"])
+                # Allow default provider selection from config
+                if "default_provider" in file_config:
+                    config["default_provider"] = file_config["default_provider"]
         except (json.JSONDecodeError, OSError) as e:
             print(f"Warning: Could not load config file {config_file}: {e}")
 
@@ -104,3 +111,22 @@ def get_cache_directory(config_file: str | Path | None = None) -> Path:
     cache_dir = config["cache"].get("directory", "data/exchange-rates")
     project_root = get_project_root()
     return project_root / cache_dir
+
+
+def get_default_provider(config_file: str | Path | None = None) -> str:
+    """
+    Get the default FX provider name.
+
+    This allows higher-level tools (like the tax-report app) to respect a
+    default provider defined in config/exchange_rates.json while still
+    allowing CLI and environment variable overrides.
+
+    Args:
+        config_file: Optional path to config file
+
+    Returns:
+        Provider name string. Falls back to "exchangerate_api" if not set.
+    """
+    config = load_config(config_file)
+    provider = config.get("default_provider") or "exchangerate_api"
+    return str(provider)
