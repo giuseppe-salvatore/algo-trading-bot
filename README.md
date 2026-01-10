@@ -16,35 +16,42 @@ This repository uses a monorepo structure with [PDM](https://pdm.fming.dev/) (Py
 
 ### Prerequisites
 
-1. **Set up Python virtual environment** (if not already done):
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Linux/macOS
-   ```
-
-2. **Install PDM in the virtual environment**:
-   ```bash
-   pip install pdm
-   ```
-   Or follow the [PDM installation guide](https://pdm.fming.dev/latest/#installation).
-   
-   **Note**: PDM is installed in the project's virtual environment. The `justfile` automatically uses `./venv/bin/pdm`, so you don't need PDM in your global PATH.
-
-3. **Install just** (optional but recommended):
+1. **Install just** (optional but recommended):
    ```bash
    # On macOS
    brew install just
    
    # On Linux (using cargo)
+   # First, install rustup if you don't have it (required for newer Rust versions):
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source ~/.cargo/env
+   
+   # Then install just
    cargo install just
    
    # Or download from https://github.com/casey/just/releases
    ```
+   
+   **Note on Ubuntu 24.04**: The Rust version from `apt` may be too old. Use `rustup` (as shown above) to get a compatible Rust version.
 
-4. **Install dependencies**:
+2. **Prepare the project environment** (creates virtual environment and installs PDM):
+   ```bash
+   just prepare
+   ```
+   
+   This command will:
+   - Create a Python virtual environment at `./venv`
+   - Install PDM in the virtual environment
+   
+   **Note**: PDM is installed in the project's virtual environment. The `justfile` automatically uses `./venv/bin/pdm`, so you don't need PDM in your global PATH.
+
+3. **Install dependencies**:
    ```bash
    just install
-   # or
+   ```
+   
+   Or manually:
+   ```bash
    ./venv/bin/pdm install
    ```
 
