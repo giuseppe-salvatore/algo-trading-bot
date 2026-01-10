@@ -64,7 +64,9 @@ The easiest way to run scripts is using the provided `justfile`:
 ```bash
 # Tax reporting commands
 just analyze              # Run analyze_events script
-just balance SYMBOL=AAPL  # Run balance_tracker for a symbol
+just balance AAPL         # Run balance_tracker for a symbol
+# Generate balance reports for all symbols:
+# apps/tax-report/scripts/generate_all_balance_reports.sh data/trading/alpaca/live/taxable_activities_analyzed.json
 
 # Forex commands
 just fetch-rates 15-01-2024 20-01-2024 USD/GBP  # Fetch exchange rates
@@ -127,7 +129,8 @@ Scripts for processing and analyzing trading events from Alpaca taxable activiti
 
 **Commands:**
 - `just analyze` - Analyze and reconcile events
-- `just balance SYMBOL=X` - Track position balance for a symbol
+- `just balance AAPL` - Track position balance for a symbol (replace AAPL with your symbol)
+- `apps/tax-report/scripts/generate_all_balance_reports.sh <input_file>` - Generate balance reports for all symbols
 
 See [apps/tax-report/README.md](apps/tax-report/README.md) for detailed documentation.
 

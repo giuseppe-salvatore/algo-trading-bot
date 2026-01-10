@@ -65,7 +65,7 @@ Or with custom input/output files:
 
 **balance_tracker:**
 ```bash
-just balance SYMBOL=AAPL
+just balance AAPL
 ```
 
 Or with custom input/splits/name-changes/output files:
@@ -76,6 +76,20 @@ Or with custom input/splits/name-changes/output files:
     --name-changes path/to/name_changes.json \
     --output path/to/report.txt
 ```
+
+**generate_all_balance_reports (generate reports for all symbols):**
+```bash
+# First, make the script executable (if not already)
+chmod +x apps/tax-report/scripts/generate_all_balance_reports.sh
+
+# Run with default analyzed events file
+apps/tax-report/scripts/generate_all_balance_reports.sh data/trading/alpaca/live/taxable_activities_analyzed.json
+
+# Or with a custom input file
+apps/tax-report/scripts/generate_all_balance_reports.sh path/to/analyzed.json
+```
+
+This script extracts all unique symbols from the analyzed events file and generates a balance report for each one. It automatically uses the `splits.json` and `name_changes.json` files from the same directory as the input file. Reports are saved to the `reports/` subdirectory (same location as individual balance reports).
 
 **fiscal_year_report:**
 ```bash
@@ -108,6 +122,12 @@ Or with custom input/splits/name-changes/output files:
 - `--name-changes` / `-n`: Override name_changes.json file path (default: `data/trading/alpaca/live/name_changes.json`)
 - `--output` / `-o`: Override output report file (default: `data/trading/alpaca/live/reports/{LATEST_SYMBOL}_balance_report.txt`)
 
+**generate_all_balance_reports.sh:**
+- `INPUT_FILE` (required): Path to the analyzed events JSON file (e.g., `taxable_activities_analyzed.json`)
+- The script automatically uses `splits.json` and `name_changes.json` from the same directory as the input file
+- Reports are generated in the `reports/` subdirectory of the input file's directory
+- Provides a summary with success/failure counts for all symbols processed
+
 **fiscal_year_report.py:**
 - `FY` (optional): UK Financial Year in format "YYYY-YY" (e.g., "2025-26"). If omitted, performs all-time analysis.
 - `--input` / `-i`: Override input analyzed events file (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
@@ -128,6 +148,12 @@ Or with custom input/splits/name-changes/output files:
   - Running position balance and average cost
   - Profit/loss for each sale
   - Accumulated gains
+
+- **generate_all_balance_reports.sh**: Generates balance reports for all unique symbols found in the analyzed events file. Each report is saved as `{SYMBOL}_balance_report.txt` in the `reports/` subdirectory. The script provides a summary showing:
+  - Total number of symbols found
+  - Number of successfully processed symbols
+  - Number of failed symbols (if any)
+  - List of failed symbols (if any)
 
 - **fiscal_year_report.py**: Creates three report files in `data/tax-return/reports/`:
   - **Text report** (`FY_YYYY-YY_capital_gains_report.txt` or `all_time_capital_gains_report.txt`):
