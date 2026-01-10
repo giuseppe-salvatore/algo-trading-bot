@@ -28,6 +28,10 @@ jobs:
       run: |
         ./venv/bin/pdm install
         ./venv/bin/pip install ruff
+        ./venv/bin/pdm install -p apps/forex --no-self
+        ./venv/bin/pdm install -p apps/tax-report --no-self
+        ./venv/bin/pdm install -p packages/common --no-self
+        ./venv/bin/pdm install -p packages/exchange_rate --no-self
 
     - name: Check code formatting
       run: |
