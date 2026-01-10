@@ -16,35 +16,42 @@ This repository uses a monorepo structure with [PDM](https://pdm.fming.dev/) (Py
 
 ### Prerequisites
 
-1. **Set up Python virtual environment** (if not already done):
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Linux/macOS
-   ```
-
-2. **Install PDM in the virtual environment**:
-   ```bash
-   pip install pdm
-   ```
-   Or follow the [PDM installation guide](https://pdm.fming.dev/latest/#installation).
-   
-   **Note**: PDM is installed in the project's virtual environment. The `justfile` automatically uses `./venv/bin/pdm`, so you don't need PDM in your global PATH.
-
-3. **Install just** (optional but recommended):
+1. **Install just** (optional but recommended):
    ```bash
    # On macOS
    brew install just
    
    # On Linux (using cargo)
+   # First, install rustup if you don't have it (required for newer Rust versions):
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source ~/.cargo/env
+   
+   # Then install just
    cargo install just
    
    # Or download from https://github.com/casey/just/releases
    ```
+   
+   **Note on Ubuntu 24.04**: The Rust version from `apt` may be too old. Use `rustup` (as shown above) to get a compatible Rust version.
 
-4. **Install dependencies**:
+2. **Prepare the project environment** (creates virtual environment and installs PDM):
+   ```bash
+   just prepare
+   ```
+   
+   This command will:
+   - Create a Python virtual environment at `./venv`
+   - Install PDM in the virtual environment
+   
+   **Note**: PDM is installed in the project's virtual environment. The `justfile` automatically uses `./venv/bin/pdm`, so you don't need PDM in your global PATH.
+
+3. **Install dependencies**:
    ```bash
    just install
-   # or
+   ```
+   
+   Or manually:
+   ```bash
    ./venv/bin/pdm install
    ```
 
@@ -57,7 +64,9 @@ The easiest way to run scripts is using the provided `justfile`:
 ```bash
 # Tax reporting commands
 just analyze              # Run analyze_events script
-just balance SYMBOL=AAPL  # Run balance_tracker for a symbol
+just balance AAPL         # Run balance_tracker for a symbol
+# Generate balance reports for all symbols:
+# apps/tax-report/scripts/generate_all_balance_reports.sh data/trading/alpaca/live/taxable_activities_analyzed.json
 
 # Forex commands
 just fetch-rates 15-01-2024 20-01-2024 USD/GBP  # Fetch exchange rates
@@ -120,7 +129,8 @@ Scripts for processing and analyzing trading events from Alpaca taxable activiti
 
 **Commands:**
 - `just analyze` - Analyze and reconcile events
-- `just balance SYMBOL=X` - Track position balance for a symbol
+- `just balance AAPL` - Track position balance for a symbol (replace AAPL with your symbol)
+- `apps/tax-report/scripts/generate_all_balance_reports.sh <input_file>` - Generate balance reports for all symbols
 
 See [apps/tax-report/README.md](apps/tax-report/README.md) for detailed documentation.
 
