@@ -1179,6 +1179,7 @@ def _compute_gbp_for_events(
     if not fx_provider:
         for _ in processed_events:
             per_event_fx.append({"profit_gbp": None, "fx": None})
+        fx_metadata["all_rates_available"] = False
         return per_event_fx, fx_metadata
 
     for pe in processed_events:
@@ -1305,14 +1306,19 @@ def main():
 
     # Resolve FX provider with same precedence as fiscal_year_report
     env_fx_provider = os.getenv("TAX_REPORT_FX_PROVIDER")
-    if args.fx_provider:
-        resolved_fx_provider = args.fx_provider
+    if args.fx_provider is not None:
+        # Handle empty string from CLI as explicit None (disable GBP conversion)
+        resolved_fx_provider = args.fx_provider.strip() if args.fx_provider.strip() else None
     elif env_fx_provider:
-        resolved_fx_provider = env_fx_provider
+        # Handle empty string from env var as explicit None
+        resolved_fx_provider = env_fx_provider.strip() if env_fx_provider.strip() else None
     else:
         resolved_fx_provider = get_default_provider()
 
-    print(f"Using FX provider for GBP conversion in balance tracker: {resolved_fx_provider}")
+    if resolved_fx_provider:
+        print(f"Using FX provider for GBP conversion in balance tracker: {resolved_fx_provider}")
+    else:
+        print("GBP conversion disabled (no FX provider configured)")
 
     # Track balance (this will resolve symbol internally)
     try:

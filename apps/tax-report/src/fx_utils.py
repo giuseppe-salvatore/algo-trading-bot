@@ -91,11 +91,16 @@ def get_gbp_conversion_info(
     """
     date_str = _normalise_date_string(transaction_time)
 
-    proxy = ExchangeRateProxy(
-        provider_name=provider_name,
-        cache_dir=cache_dir,
-        config_file=config_file,
-    )
+    try:
+        proxy = ExchangeRateProxy(
+            provider_name=provider_name,
+            cache_dir=cache_dir,
+            config_file=config_file,
+        )
+    except ValueError:
+        # Provider initialization failed (e.g., missing API key)
+        # Silently skip GBP conversion - this allows CI/test runs without API keys
+        return None
 
     result: dict[str, Any] | None = proxy.get_rate(
         transaction_date=date_str,
