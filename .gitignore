@@ -32,4 +32,4 @@ data/trading/alpaca/test/taxable_activities_analyzed.json
 data/exchange-rates/cache.json
 
 # Config files with API keys (use config/exchange_rates.json.example as template)
-config/exchange_rates.json
+config/

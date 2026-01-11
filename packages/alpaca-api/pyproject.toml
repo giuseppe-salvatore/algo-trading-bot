@@ -1,0 +1,18 @@
+[project]
+name = "alpaca-api"
+version = "0.1.0"
+description = "Alpaca API client for fetching account activities (trade events, dividends, etc.)"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31.0",
+]
+
+[tool.pdm]
+package-dir = "src"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.build]
+package-dir = "src"
