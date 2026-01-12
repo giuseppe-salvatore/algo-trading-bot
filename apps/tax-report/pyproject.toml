@@ -10,6 +10,7 @@ dependencies = [
 [project.scripts]
 analyze-events = "analyze_events:main"
 balance-tracker = "balance_tracker:main"
+dividend-report = "dividend_report:main"
 
 [tool.pdm]
 package-dir = "src"

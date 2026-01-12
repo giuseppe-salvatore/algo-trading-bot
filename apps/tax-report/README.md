@@ -4,13 +4,15 @@ Python scripts to process and analyze trading events from Alpaca taxable activit
 
 ## Overview
 
-This project contains three scripts for processing Alpaca trading activity data:
+This project contains four scripts for processing Alpaca trading activity data:
 
 1. **analyze_events.py**: Analyzes events by grouping them by `order_id`, identifying atomic events, and reconciling events with the same order_id. Correctly uses `cum_qty` for total quantities. This is the script used by `balance_tracker.py` and `fiscal_year_report.py`.
 
 2. **balance_tracker.py**: Tracks position balance for a specific symbol, showing buy/sell events, quantities, prices, cost basis, and position status (opened, updated, or closed) in a human-readable format. Calculates profit/loss on every sale using the Average Cost Basis method.
 
 3. **fiscal_year_report.py**: Generates comprehensive UK Financial Year or all-time capital gains reports across all symbols. Processes all events from day 0 to maintain accurate cost basis, but only counts profits from events within the specified FY period (or all events for all-time analysis). Generates reports in text, JSON, and CSV formats.
+
+4. **dividend_report.py**: Generates UK Financial Year or all-time dividend reports from Alpaca dividend data. Lists individual dividend payments with dates and amounts, calculates totals by symbol, and supports USD-GBP conversion. Generates reports in text, JSON, and CSV formats.
 
 ## Features
 
@@ -109,6 +111,22 @@ Or with custom input/splits/name-changes/output files:
     --output-dir path/to/output/
 ```
 
+**dividend_report:**
+```bash
+# For a specific UK Financial Year (e.g., 2025-26 = April 6, 2025 to April 5, 2026)
+pdm run -p apps/tax-report dividend-report 2025-26
+
+# For all-time analysis (all dividends from day 0)
+pdm run -p apps/tax-report dividend-report
+```
+
+Or with custom input/output files:
+```bash
+./venv/bin/pdm run -p apps/tax-report python apps/tax-report/src/dividend_report.py 2025-26 \
+    --input path/to/dividends.json \
+    --output-dir path/to/output/
+```
+
 ### Command-Line Options
 
 **analyze_events.py:**
@@ -134,6 +152,13 @@ Or with custom input/splits/name-changes/output files:
 - `--splits` / `-s`: Override splits file path (default: `data/trading/alpaca/live/splits.json`)
 - `--name-changes` / `-n`: Override name_changes.json file path (default: `data/trading/alpaca/live/name_changes.json`)
 - `--output-dir` / `-o`: Override output directory (default: `data/tax-return/reports/`)
+- `--fx-provider`: Exchange rate provider for GBP conversion (default: from config or env)
+
+**dividend_report.py:**
+- `FY` (optional): UK Financial Year in format "YYYY-YY" (e.g., "2025-26"). If omitted, performs all-time analysis.
+- `--input` / `-i`: Override input dividends.json file (default: most recent in `data/dividends/alpaca/live/`)
+- `--output-dir` / `-o`: Override output directory (default: `data/tax-return/reports/`)
+- `--fx-provider`: Exchange rate provider for GBP conversion (default: from config or env)
 
 ### Output
 
@@ -162,6 +187,15 @@ Or with custom input/splits/name-changes/output files:
     - Separate sections for gains and losses
   - **JSON report** (`.json`): Structured data with FY period, totals, and per-symbol breakdown
   - **CSV report** (`.csv`): Simple format with symbol and profit/loss columns
+
+- **dividend_report.py**: Creates six report files in `data/tax-return/reports/` (USD-only and USD-GBP versions):
+  - **Text report** (`FY_YYYY-YY_dividend_report.USD.txt` or `all_time_dividend_report.USD.txt`):
+    - Summary with total dividends
+    - Individual dividends sorted by date (oldest first)
+    - Totals by symbol, sorted by amount (highest first)
+    - GBP version includes conversion rates for each dividend
+  - **JSON report** (`.json`): Structured data with FY period, totals, dividends by symbol, and individual dividend entries
+  - **CSV report** (`.csv`): Simple format with symbol and total amount columns
 
 ## How It Works
 
