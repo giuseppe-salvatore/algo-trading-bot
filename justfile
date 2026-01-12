@@ -86,6 +86,13 @@ fetch-rates START_DATE END_DATE CURRENCY_PAIR *ARGS:
     @echo "Fetching exchange rates from {{START_DATE}} to {{END_DATE}} for {{CURRENCY_PAIR}}..."
     ./venv/bin/pdm run -p apps/forex python apps/forex/src/fetch_rates.py {{START_DATE}} {{END_DATE}} {{CURRENCY_PAIR}} {{ARGS}}
 
+# Fetch dividend activities from Alpaca for a date range
+# Usage: just fetch-dividends 2020-07-07 2026-01-11
+# Optional flags: --output-dir data/dividends/alpaca/test
+fetch-dividends AFTER UNTIL *ARGS:
+    @echo "Fetching dividends from {{AFTER}} to {{UNTIL}}..."
+    ./venv/bin/pdm run -p apps/fetch-dividends python apps/fetch-dividends/src/fetch_dividends.py --after {{AFTER}} --until {{UNTIL}} {{ARGS}}
+
 # Run tests for all packages
 test:
     @echo "Running tests..."

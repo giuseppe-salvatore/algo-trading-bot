@@ -1,0 +1,14 @@
+[project]
+name = "fetch-dividends"
+version = "0.1.0"
+description = "Fetch dividend activities from Alpaca API"
+requires-python = ">=3.12"
+dependencies = [
+    "alpaca-api @ file:///${PROJECT_ROOT}/../../packages/alpaca-api",
+]
+
+[project.scripts]
+fetch-dividends = "fetch_dividends:main"
+
+[tool.pdm]
+package-dir = "src"
