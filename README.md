@@ -71,6 +71,10 @@ just balance AAPL         # Run balance_tracker for a symbol
 # Forex commands
 just fetch-rates 15-01-2024 20-01-2024 USD/GBP  # Fetch exchange rates
 
+# Alpaca data fetching commands
+pdm run -p apps/fetch-trades python apps/fetch-trades/src/fetch_trades.py --after 2020-07-07 --until 2025-11-24
+pdm run -p apps/fetch-dividends python apps/fetch-dividends/src/fetch_dividends.py --after 2020-07-07 --until 2025-11-24
+
 # Development commands
 just install    # Install all dependencies
 just sync       # Sync dependencies
@@ -98,9 +102,17 @@ alpaca-scripts/
 │   │   ├── tests/
 │   │   ├── README.md
 │   │   └── pyproject.toml
-│   └── forex/                # Forex exchange rate tools
+│   ├── forex/                # Forex exchange rate tools
+│   │   ├── src/
+│   │   ├── tests/
+│   │   ├── README.md
+│   │   └── pyproject.toml
+│   ├── fetch-trades/         # Fetch trading activities from Alpaca
+│   │   ├── src/
+│   │   ├── README.md
+│   │   └── pyproject.toml
+│   └── fetch-dividends/      # Fetch dividend activities from Alpaca
 │       ├── src/
-│       ├── tests/
 │       ├── README.md
 │       └── pyproject.toml
 ├── packages/
@@ -109,7 +121,12 @@ alpaca-scripts/
 │   │   ├── tests/
 │   │   ├── README.md
 │   │   └── pyproject.toml
-│   └── exchange_rate/        # Exchange rate proxy package
+│   ├── exchange_rate/        # Exchange rate proxy package
+│   │   ├── src/
+│   │   ├── tests/
+│   │   ├── README.md
+│   │   └── pyproject.toml
+│   └── alpaca-api/           # Alpaca API client package
 │       ├── src/
 │       ├── tests/
 │       ├── README.md
@@ -143,6 +160,24 @@ Command-line tools for fetching historical exchange rates from multiple provider
 
 See [apps/forex/README.md](apps/forex/README.md) for detailed documentation.
 
+### [fetch-trades](apps/fetch-trades/)
+
+Command-line tool for fetching trading activities (FILL, NC, SPLIT) from Alpaca API. Saves data to timestamped daily folders to avoid overriding existing data.
+
+**Commands:**
+- `pdm run -p apps/fetch-trades python apps/fetch-trades/src/fetch_trades.py [--after DATE] [--until DATE]` - Fetch trading activities
+
+See [apps/fetch-trades/README.md](apps/fetch-trades/README.md) for detailed documentation.
+
+### [fetch-dividends](apps/fetch-dividends/)
+
+Command-line tool for fetching dividend activities (DIV) from Alpaca API. Saves data to timestamped daily folders to avoid overriding existing data.
+
+**Commands:**
+- `pdm run -p apps/fetch-dividends python apps/fetch-dividends/src/fetch_dividends.py [--after DATE] [--until DATE]` - Fetch dividend activities
+
+See [apps/fetch-dividends/README.md](apps/fetch-dividends/README.md) for detailed documentation.
+
 ## Packages
 
 ### [common](packages/common/)
@@ -156,6 +191,12 @@ See [packages/common/README.md](packages/common/README.md) for more information.
 Abstraction layer for fetching historical exchange rates from multiple providers (exchangerate-api.com, openexchangerates.org, APILayer) with intelligent caching and multi-source support. Used by the forex app for currency conversion.
 
 See [packages/exchange_rate/README.md](packages/exchange_rate/README.md) for detailed documentation.
+
+### [alpaca-api](packages/alpaca-api/)
+
+Alpaca API client package providing a clean interface for fetching account activities (trade events, dividends, name changes, splits, etc.) from the Alpaca REST API. Used by the fetch-trades and fetch-dividends apps.
+
+See [packages/alpaca-api/README.md](packages/alpaca-api/README.md) for detailed documentation.
 
 ## Workspace Management
 
