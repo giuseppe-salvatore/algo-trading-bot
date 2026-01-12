@@ -147,6 +147,10 @@ Scripts for processing and analyzing trading events from Alpaca taxable activiti
 **Commands:**
 - `just analyze` - Analyze and reconcile events
 - `just balance AAPL` - Track position balance for a symbol (replace AAPL with your symbol)
+- `just fiscal-report 2025-26` - Generate capital gains report for a fiscal year
+- `just fiscal-report-all-time` - Generate all-time capital gains report
+- `pdm run -p apps/tax-report dividend-report 2025-26` - Generate dividend report for a fiscal year
+- `pdm run -p apps/tax-report dividend-report` - Generate all-time dividend report
 - `apps/tax-report/scripts/generate_all_balance_reports.sh <input_file>` - Generate balance reports for all symbols
 
 See [apps/tax-report/README.md](apps/tax-report/README.md) for detailed documentation.
