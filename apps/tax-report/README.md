@@ -4,15 +4,17 @@ Python scripts to process and analyze trading events from Alpaca taxable activit
 
 ## Overview
 
-This project contains four scripts for processing Alpaca trading activity data:
+This project contains five scripts for processing Alpaca trading activity data:
 
-1. **analyze_events.py**: Analyzes events by grouping them by `order_id`, identifying atomic events, and reconciling events with the same order_id. Correctly uses `cum_qty` for total quantities. This is the script used by `balance_tracker.py` and `fiscal_year_report.py`.
+1. **analyze_events.py**: Analyzes events by grouping them by `order_id`, identifying atomic events, and reconciling events with the same order_id. Correctly uses `cum_qty` for total quantities. This is the script used by `balance_tracker.py`, `fiscal_year_report.py`, and `value_assets_sold.py`.
 
 2. **balance_tracker.py**: Tracks position balance for a specific symbol, showing buy/sell events, quantities, prices, cost basis, and position status (opened, updated, or closed) in a human-readable format. Calculates profit/loss on every sale using the Average Cost Basis method.
 
 3. **fiscal_year_report.py**: Generates comprehensive UK Financial Year or all-time capital gains reports across all symbols. Processes all events from day 0 to maintain accurate cost basis, but only counts profits from events within the specified FY period (or all events for all-time analysis). Generates reports in text, JSON, and CSV formats.
 
 4. **dividend_report.py**: Generates UK Financial Year or all-time dividend reports from Alpaca dividend data. Lists individual dividend payments with dates and amounts, calculates totals by symbol, and supports USD-GBP conversion. Generates reports in text, JSON, and CSV formats.
+
+5. **value_assets_sold.py**: Calculates the total value of assets sold within a UK Financial Year. Filters all SELL orders (both long sales and short sales) and sums their values. This is used to determine if tax reporting is required based on disposal value thresholds. Generates reports in text, JSON, and CSV formats with USD and USD-GBP versions.
 
 ## Features
 
@@ -127,6 +129,23 @@ Or with custom input/output files:
     --output-dir path/to/output/
 ```
 
+**value_assets_sold:**
+```bash
+# For a specific UK Financial Year (e.g., 2025-26 = April 6, 2025 to April 5, 2026)
+python3 apps/tax-report/src/value_assets_sold.py 2025-26
+
+# For all-time analysis (all SELL orders from day 0)
+python3 apps/tax-report/src/value_assets_sold.py
+```
+
+Or with custom input/output files:
+```bash
+python3 apps/tax-report/src/value_assets_sold.py 2025-26 \
+    --input path/to/analyzed.json \
+    --output-dir path/to/output/ \
+    --fx-provider apilayer
+```
+
 ### Command-Line Options
 
 **analyze_events.py:**
@@ -157,6 +176,12 @@ Or with custom input/output files:
 **dividend_report.py:**
 - `FY` (optional): UK Financial Year in format "YYYY-YY" (e.g., "2025-26"). If omitted, performs all-time analysis.
 - `--input` / `-i`: Override input dividends.json file (default: most recent in `data/dividends/alpaca/live/`)
+- `--output-dir` / `-o`: Override output directory (default: `data/tax-return/reports/`)
+- `--fx-provider`: Exchange rate provider for GBP conversion (default: from config or env)
+
+**value_assets_sold.py:**
+- `FY` (optional): UK Financial Year in format "YYYY-YY" (e.g., "2025-26"). If omitted, performs all-time analysis.
+- `--input` / `-i`: Override input analyzed events file (default: `data/trading/alpaca/live/taxable_activities_analyzed.json`)
 - `--output-dir` / `-o`: Override output directory (default: `data/tax-return/reports/`)
 - `--fx-provider`: Exchange rate provider for GBP conversion (default: from config or env)
 
@@ -196,6 +221,15 @@ Or with custom input/output files:
     - GBP version includes conversion rates for each dividend
   - **JSON report** (`.json`): Structured data with FY period, totals, dividends by symbol, and individual dividend entries
   - **CSV report** (`.csv`): Simple format with symbol and total amount columns
+
+- **value_assets_sold.py**: Creates six report files in `data/tax-return/reports/` (USD-only and USD-GBP versions):
+  - **Text report** (`FY_YYYY-YY_assets_sold_value.USD.txt` or `all_time_assets_sold_value.USD.txt`):
+    - Summary with total value of assets sold
+    - Individual transactions sorted by date (oldest first) with qty, price, and value
+    - Totals by symbol, sorted by value (highest first)
+    - GBP version includes conversion rates for each transaction
+  - **JSON report** (`.json`): Structured data with FY period, totals, values by symbol, and individual transaction entries
+  - **CSV report** (`.csv`): Simple format with transaction details and summary by symbol
 
 ## How It Works
 
@@ -279,17 +313,17 @@ Financial Year: 2025-26 (April 06, 2025 to April 05, 2026)
 
 Summary:
 --------------------------------------------------------------------------------
-Total Profit/Loss: $3,665.08
-Number of Symbols with Gains: 14
-Number of Symbols with Losses: 2
+Total Profit/Loss: $5,250.00
+Number of Symbols with Gains: 3
+Number of Symbols with Losses: 1
 
 Gains by Symbol (sorted by profit, highest first):
 --------------------------------------------------------------------------------
 Symbol                   Profit/Loss
 --------------------------------------------------------------------------------
-INTC                       $1,537.44
-TSLA                         $562.72
-AMD                          $527.39
+EXAMPLE_A                   $3,000.00
+EXAMPLE_B                   $1,500.00
+EXAMPLE_C                     $750.00
 ...
 ```
 
@@ -299,6 +333,49 @@ AMD                          $527.39
 - For all-time analysis, counts all taxable profits across entire trading history
 - Uses the same Average Cost Basis method as `balance_tracker.py` for consistency
 - Handles stock splits, symbol name changes, and complex position transitions
+
+### value_assets_sold.py
+
+1. **Load and Analyze Events**: Reads all events from `data/trading/alpaca/live/taxable_activities_analyzed.json` (default) and processes them using `analyze_events()` function
+2. **Filter SELL Orders**: Filters events where `side` is "sell" or "sell_short" (includes both long sales and short sales)
+3. **Apply FY Date Filter**: If a Financial Year is specified, only includes SELL orders within that period (April 6 to April 5)
+4. **Calculate Values**: For each SELL order, calculates value as `qty × price`
+5. **Convert to GBP**: If FX provider is configured, converts each transaction value to GBP using the transaction date's exchange rate
+6. **Group by Symbol**: Sums values per symbol and calculates grand total
+7. **Generate Reports**: Creates text, JSON, and CSV reports with:
+   - Individual transaction details (date, symbol, qty, price, value)
+   - Totals by symbol, sorted by value (highest first)
+   - Grand total of all assets sold
+
+**Example Output (Text Report):**
+```
+================================================================================
+UK Financial Year Assets Sold Value Report
+Financial Year: 2024-25 (April 06, 2024 to April 05, 2025)
+================================================================================
+
+Summary:
+--------------------------------------------------------------------------------
+Total Value of Assets Sold: $12,500.00
+Total Value of Assets Sold (GBP): £10,000.00
+Number of Symbols: 3
+Number of SELL Transactions: 4
+
+Individual Transactions (sorted by date, oldest first):
+---------------------------------------------------------------------------------------------------------------------
+Date/Time            Symbol          Qty          Price                 Value (USD)          Value (GBP)      FX Rate
+---------------------------------------------------------------------------------------------------------------------
+2024-04-15 10:00:00  EXAMPLE_X       10.0000      $100.00                $1,000.00           £800.00         0.800000
+2024-04-16 11:00:00  EXAMPLE_Y        5.0000      $150.00                  $750.00           £600.00         0.800000
+...
+```
+
+**Key Points:**
+- Includes ALL SELL orders (both long sales and short sales) as required for UK tax compliance
+- Short sales are included because HMRC considers disposal proceeds from short sales as part of the annual disposal value threshold
+- The total value can be used to determine if tax reporting is required based on UK disposal value thresholds
+- Supports both USD-only and USD-GBP report versions
+- For all-time analysis, includes all SELL orders from day 0
 
 ## Test Data
 
